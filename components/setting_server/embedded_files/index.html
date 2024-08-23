@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang='en'>
+  <link rel='stylesheet' href='style.css' type='text/css' />
+  <head>
+    <title>Settings</title>
+  </head>
+  <body id='body'>
+    <header>
+      <nav>
+        <span>Settings</span>
+        <input type='button' onclick='getSetting()' value='Get settings' />
+        <input type='button' onclick='getInfo()' value='Get info' />
+        <input type='button' onclick='setTime()' value='Set time' />
+        <button id='exit' onclick='serverExit()'>Quit</button>
+      </nav>
+    </header>
+    <div id='modal' class='hide'></div>
+    <div class='setting_page' id='settings_forms'></div>
+    <footer>2024</footer>
+    <script src='script.js'></script>
+  </body>
+</html>

@@ -1,0 +1,258 @@
+fieldset {
+    margin: 1rem 10%;
+    font-size: larger;
+    color: #4a4f61;
+    border-radius: 1rem;
+    border-color: #4a4f61;
+    background-color: #e7edf1;
+}
+
+button,
+input {
+    font-size: larger;
+    padding: 0.4rem;
+    margin-bottom: 1rem;
+    margin-right: 1rem;
+    cursor: pointer;
+}
+
+button,
+input[type='button'],
+input[type='submit'] {
+    user-select: none;
+    color: #fff;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    border-radius: 5px;
+    background-color: rgb(0, 17, 208);
+    box-shadow: 5px 2px 4px #999;
+    border: none;
+    font-size: 1.5rem;
+    animation-duration: 1s;
+    opacity: 0.7;
+}
+
+button:hover,
+input[type='submit']:hover,
+input[type='button']:hover {
+    box-shadow: 5px 2px 4px #666;
+    opacity: 0.8;
+}
+
+button:active,
+input[type='submit']:active,
+input[type='button']:active {
+    transform: translate(2px, 2px);
+}
+
+nav {
+    user-select: none;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    min-width: 100%;
+    margin: 0;
+    left: 0;
+    top: 0;
+    padding: 0.5rem 0;
+    margin-bottom: 1rem;
+}
+
+body {
+    font-size: larger;
+    font-family: sans-serif;
+    padding: 0px;
+    margin: 0px;
+    width: 100%;
+    height: fit-content;
+}
+
+
+nav span {
+    margin: 1rem;
+    font-size: 2rem;
+    width: content;
+    color: #0b75d7;
+    margin-right: auto;
+}
+
+nav form {
+    width: fit-content;
+    display: block;
+}
+
+footer {
+    text-align: center;
+    padding: 1rem 0;
+    background-color: rgb(84, 84, 84);
+    color: #fff;
+    min-width: max-content;
+}
+
+@media only screen and (max-width: 850px) {
+    footer {
+        display: none;
+    }
+
+    fieldset {
+        margin-right: 0;
+        margin-left: 0;
+    }
+}
+
+
+.hide {
+    display: none;
+    margin-left: 33%;
+    width: 33%;
+    text-align: center;
+}
+
+.show {
+    position: absolute;
+    color: white;
+    font-size: 2rem;
+    padding: 2rem;
+    height: max-content;
+    opacity: 0.9;
+    border-radius: 0.5rem;
+    transition: linear 0.5s 3s;
+    display: block;
+    z-index: 10;
+}
+
+label {
+    display: inline-block;
+    padding-left: 2rem;
+    margin: 1rem;
+    height: fit-content;
+    color: black;
+}
+
+th {
+    color: black;
+    font-size: 1.5rem;
+    width: 17%;
+    margin-bottom: 2rem;
+}
+
+tr {
+    display: flex;
+}
+
+td {
+    display: flex;
+    flex-direction: column;
+    width: 17%;
+}
+
+
+input[type='file'] {
+    font-size: 1rem;
+    border: none;
+    border-radius: 5px;
+    background-color: #0662a8;
+    color: #0662a8;
+    width: 8rem;
+    margin: 0;
+    border: 0;
+    padding: 5px;
+}
+
+#titles {
+    width: fit-content;
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+    align-items: center;
+    outline: none;
+}
+
+.title_head {
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    opacity: 0.5;
+}
+
+#exit {
+    margin-right: 2rem;
+}
+
+
+h2,
+h3 {
+    text-align: center;
+    margin-top: 1rem;
+}
+
+
+input[type='submit'] {
+    margin-right: 100%;
+}
+
+.controlBut[type='button'] {
+    font-size: larger;
+    font-weight: 800;
+    background-color: #8cadc6;
+    color: white;
+    margin-left: 40%;
+    display: block;
+}
+
+.danger {
+    background-color: #a00909 !important;
+}
+
+button.danger {
+    opacity: 1;
+}
+
+table {
+    width: 100%;
+}
+
+input[type='text'],
+input[type='time'] {
+    border: none;
+    outline: none;
+}
+
+input[type='text']:focus,
+input[type='time']:focus {
+    outline: rgba(0, 17, 208, 0.7) 2px solid;
+}
+
+input[type='checkbox'] {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    width: 20px;
+    height: 20px;
+    border: 2px solid #666;
+    border-radius: 4px;
+    background-color: white;
+    position: relative;
+}
+
+input[type='checkbox']:checked {
+    background-color: green;
+    border-color: green;
+}
+
+input[type='checkbox']:checked::after {
+    content: '\2714';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 16px;
+    color: white;
+}
+
+input[type='checkbox']:disabled {
+    cursor: default;
+}
+
+input[type='number'] {
+    width: 5rem;
+}

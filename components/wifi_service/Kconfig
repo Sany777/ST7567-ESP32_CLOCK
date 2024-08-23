@@ -1,0 +1,37 @@
+menu "Network Configuration"
+
+    config WIFI_STA_DEBUG_SSID
+        string "WiFi debug SSID"
+        default ""
+        help
+            SSID (network name).
+
+    config WIFI_STA_DEBUG_PASSWORD
+        string "WiFi debug password"
+        default ""
+        help
+            WiFi password (WPA or WPA2).
+
+    config WIFI_AP_SSID
+        string "WiFi AP SSID"
+        default "ESPClock"
+        help
+            SSID (network name).
+
+    config WIFI_AP_PASSWORD
+        string "WiFi AP password"
+        default "esp32denver"
+        help
+            WiFi password (WPA or WPA2).
+
+
+    config MAX_STA_CONN
+        int "Maximal STA connections"
+        default 1
+        help
+            Max number of the STA connects to AP.
+
+    config ESPNOW_ENABLE_LONG_RANGE
+        bool "Enable long range"
+
+endmenu

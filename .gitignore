@@ -1,0 +1,50 @@
+# Бінарні файли
+*.o
+*.ko
+*.obj
+*.elf
+*.map
+*.out
+*.ihex
+*.hex
+*.bin
+*.d
+
+# Бібліотеки
+*.lib
+*.a
+*.la
+*.lo
+*.dll
+*.so
+*.dylib
+
+# Виконувані файли
+*.exe
+*.out
+*.app
+
+# Лог-файли
+*.log
+
+# Налаштування IDE та редакторів
+.idea/
+.vscode/
+*.swp
+*~
+*#
+
+# Файли збірки
+build/
+cmake-build-debug/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+CMakeLists.txt.user
+
+# Тимчасові файли
+*.tmp
+*.bak
+*.old
+
