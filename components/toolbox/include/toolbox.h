@@ -7,21 +7,6 @@
 extern "C" {
 #endif
 
-// class AutoLock{
-//     // SemaphoreHandle_t _semaphore;
-// public:
-//     AutoLock(int &semaphore);
-//     ~AutoLock();
-// };
-
-// #define ENTER_CRITICAL(semaphore)    
-//     AutoLock _al(semaphore)
-
-
-
-
-
-// #include "cstdint"
 
 
 

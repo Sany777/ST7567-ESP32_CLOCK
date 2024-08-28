@@ -1,8 +1,6 @@
 #include "sound_generator.h"
 
 
-#define SOC_LEDC_SUPPORT_HS_MODE 1 
-
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/ledc.h"
@@ -17,7 +15,7 @@
 #define LEDC_CHANNEL            LEDC_CHANNEL_0
 #define LEDC_DUT_RES            LEDC_TIMER_13_BIT 
 #define DEFAULT_DUTY            (50) //  50%
-#define DEFAULT_FREQUENCY       (200) // 2.6 кГц
+#define DEFAULT_FREQUENCY       (2000) // 2 кГц
 #define DEFAULT_DELAY           100
 
 
@@ -48,8 +46,9 @@ static void start_pwm(unsigned duty);
 
 static void IRAM_ATTR continue_signale()
 {
+    device_set_state(BIT_WAIT_SIGNALE);
     ledc_timer_resume(ledc_timer.speed_mode, ledc_timer.timer_num);
-    periodic_task_isr_create(signale_stop, _delay/2, 1);
+    create_periodic_isr_task(signale_stop, _delay/2, 1);
 }
 
 void start_single_signale(unsigned delay, unsigned freq)
@@ -69,7 +68,7 @@ void alarm()
 
 void start_alarm()
 {
-    periodic_task_isr_create(alarm, 1000, 7);
+    create_periodic_isr_task(alarm, 1000, 7);
 }
 
 void start_signale_series(unsigned delay, unsigned count, unsigned freq)
@@ -79,14 +78,15 @@ void start_signale_series(unsigned delay, unsigned count, unsigned freq)
     if(delay == 0)_delay = DEFAULT_DELAY;
     else _delay = delay;
     if(count>1){
-        periodic_task_isr_create(continue_signale, _delay, count-1);
+        create_periodic_isr_task(continue_signale, _delay, count-1);
     }
-    periodic_task_isr_create(signale_stop, _delay/2, 1);
+    create_periodic_isr_task(signale_stop, _delay/2, 1);
 }
 
 static IRAM_ATTR void signale_stop()
 {
     ledc_timer_pause(ledc_timer.speed_mode, ledc_timer.timer_num);
+    device_clear_state(BIT_WAIT_SIGNALE);
 }
 
 static void init_pwm(unsigned freq_hz)
@@ -99,6 +99,7 @@ static void init_pwm(unsigned freq_hz)
 
 static void start_pwm(unsigned duty)
 {
+    device_set_state(BIT_WAIT_SIGNALE);
     if(duty > 99 || duty == 0) duty = DEFAULT_DUTY;
     ledc_set_duty(ledc_channel.speed_mode, ledc_channel.channel, duty);
     ledc_update_duty(ledc_channel.speed_mode, ledc_channel.channel);

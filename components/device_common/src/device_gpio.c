@@ -6,11 +6,14 @@
 #include "driver/gpio.h"
 #include "periodic_task.h"
 #include "device_macro.h"
-#include "portmacro.h"
-// 34 - UP, 27 - left, 35 - right, 32 - , 33 -center,
 
-static const int joystic_pin[] = {GPIO_NUM_35,GPIO_NUM_33,GPIO_NUM_27};
-static const int BUT_NUM = sizeof(joystic_pin)/sizeof(joystic_pin[0]);
+#include "freertos/FreeRTOS.h"
+#include "portmacro.h"
+
+// DT 12, SCC 14, SWW 33
+
+static const int swt_pin[] = {GPIO_NUM_12,GPIO_NUM_14,GPIO_NUM_33};
+static const int SWT_NUM = sizeof(swt_pin)/sizeof(swt_pin[0]);
 
 
 static void IRAM_ATTR send_sig_update_pos()
@@ -21,7 +24,7 @@ static void IRAM_ATTR send_sig_update_pos()
 void IRAM_ATTR gpio_isr_handler(void* arg)
 {
     set_bit_from_isr(BIT_WAIT_MOVING);
-    periodic_task_isr_create(send_sig_update_pos, 300, 1);
+    create_periodic_isr_task(send_sig_update_pos, 300, 1);
 }
 
 void setup_gpio_interrupt()
@@ -48,9 +51,9 @@ int IRAM_ATTR device_set_pin(int pin, unsigned state)
 
 void device_gpio_init()
 {
-    for(int i=0; i<BUT_NUM; ++i){
-        gpio_set_direction(joystic_pin[i], GPIO_MODE_INPUT);
-        gpio_pulldown_en(joystic_pin[i]);
+    for(int i=0; i<SWT_NUM; ++i){
+        gpio_set_direction(swt_pin[i], GPIO_MODE_INPUT);
+        // gpio_pulldown_en(swt_pin[i]);
     }
     setup_gpio_interrupt();
 }
@@ -62,13 +65,14 @@ static void end_but_input()
 
 int device_get_joystick_btn()
 {
-    for(int i=0; i<BUT_NUM; ++i){
-        if(gpio_get_level(joystic_pin[i])){
-            start_single_signale(10, 1000);
+    for(int i=0; i<SWT_NUM; ++i){
+        if(gpio_get_level(swt_pin[i])){
+            start_single_signale(100, 2000);
             device_set_state(BIT_WAIT_BUT_INPUT);
-            periodic_task_isr_create(end_but_input, 4000, 1);
+            create_periodic_isr_task(end_but_input, 4000, 1);
             return i;
         }
     }
     return NO_DATA;
 }
+

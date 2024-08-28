@@ -7,19 +7,27 @@ extern "C" {
 #endif
 
 
-typedef void(*periodic_func_in_isr_t)();
+#define FOREVER -1
+
+typedef void(*periodic_func_t)();
 
 
 
-void periodic_task_remove(periodic_func_in_isr_t func);
-int periodic_task_isr_create(periodic_func_in_isr_t func,
+
+
+void remove_isr_task(periodic_func_t func);
+void remove_task(periodic_func_t func);
+int create_periodic_isr_task(periodic_func_t func,
                             unsigned delay_ms, 
                             unsigned count);
-void device_timer_start(void);
-void task_runner_stop(void);
-void task_runner_deinit(void);
-void start_timer();
+int create_periodic_task(periodic_func_t func,
+                            unsigned delay_sec, 
+                            unsigned count);
+void restart_timer();
 long long get_timer_ms();
+void task_runner_deinit();
+
+
 
 
 

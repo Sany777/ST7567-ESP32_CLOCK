@@ -94,21 +94,3 @@ int I2C_read_bytes(uint8_t i2c_addr, uint8_t *data_rd, const int length)
     return I2C_read_reg(i2c_addr, NO_DATA_REG, data_rd, length);
 }
 
-
-int I2C_read_response(uint8_t i2c_addr, uint8_t *data_rd, const int length)
-{
-    i2c_cmd_handle_t  i2c_cmd = i2c_cmd_link_create();
-    if (i2c_cmd == NULL) {
-        return ESP_ERR_NO_MEM; 
-    }
-    CHECK_AND_GO(i2c_master_start(i2c_cmd), err_label);
-    CHECK_AND_GO(i2c_master_write_byte(i2c_cmd, (i2c_addr << 1) | I2C_MASTER_READ, true), err_label);
-    i2c_master_read(i2c_cmd, data_rd, length, I2C_MASTER_LAST_NACK);
-    CHECK_AND_GO(i2c_master_stop(i2c_cmd), err_label);
-    esp_err_t ret = i2c_master_cmd_begin(I2C_MASTER_NUM, i2c_cmd, 1000 / portTICK_PERIOD_MS);
-    i2c_cmd_link_delete(i2c_cmd);
-    return ret;
-err_label:
-    i2c_cmd_link_delete(i2c_cmd);
-    return ESP_FAIL;
-}

@@ -1,13 +1,15 @@
-#include "DHT20.h"
+#include "dht20.h"
 
-#include "stdint.h"
-#include "esp_log.h"
+#include <stdio.h>
+#include "i2c_adapter.h"
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "i2c_adapter.h"
-#include "device_macro.h"
-#include "device_common.h"
+#include "esp_log.h"
+#include "esp_err.h"
 
+
+static uint8_t dht20_crc8(uint8_t *message, uint8_t Num);
 
 #define DHT20_ADDR                  0x38
 #define DHT20_CMD_MEASURE           0xAC
@@ -16,38 +18,95 @@
 
 #define DHT20_STATUS_BUSY           0x80
 #define DHT20_MAX_BUSY_WAIT_MS      1000
-#define DHT20_CHECK_BUSY_DELAY_MS   50
-
-static const char *TAG = "DHT20";
+#define DHT20_CHECK_BUSY_DELAY_MS   40
 
 
-int DHT20_read_data(float *temperature, float *humidity) 
+
+uint8_t dht20_status(void)
 {
-    uint8_t measure_cmd[] = {DHT20_CMD_MEASURE};
-    uint8_t data[6] = {0};
-    uint8_t status;
-    int wait_time = 0;
-    CHECK_AND_RET_ERR(I2C_write_bytes(DHT20_ADDR, measure_cmd, sizeof(measure_cmd)));
-    do {
-        vTaskDelay(pdMS_TO_TICKS(DHT20_CHECK_BUSY_DELAY_MS));
-        CHECK_AND_RET_ERR(I2C_read_response(DHT20_ADDR, &status, sizeof(status)));
-        wait_time += DHT20_CHECK_BUSY_DELAY_MS;
-        if (wait_time >= DHT20_MAX_BUSY_WAIT_MS) {
-            ESP_LOGE(TAG, "Sensor is busy for too long");
-            return ESP_FAIL;
-        }
-    } while (status&DHT20_STATUS_BUSY);
-    
-    CHECK_AND_RET_ERR(I2C_read_bytes(DHT20_ADDR, data, sizeof(data)));
-
-    uint32_t raw_humidity = ((uint32_t)data[1] << 12) | ((uint32_t)data[2] << 4) | ((uint32_t)data[3] >> 4);
-    uint32_t raw_temperature = (((uint32_t)data[3] & 0x0F) << 16) | ((uint32_t)data[4] << 8) | (uint32_t)data[5];
-
-    if(humidity)
-        *humidity = ((float)raw_humidity / 1048576.0) * 100.0;
-    if(temperature)
-        *temperature = ((float)raw_temperature / 1048576.0) * 200.0 - 50.0;
-
-    return ESP_OK;
+    uint8_t rxdata;
+    I2C_write_byte(DHT20_I2C_ADDRESS, 0x71);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+    I2C_read_bytes(DHT20_I2C_ADDRESS, &rxdata, 1);
+    return (rxdata);
 }
 
+
+bool dht20_is_calibrated(void)
+{
+    uint8_t status_byte = dht20_status();
+    if ((status_byte & 0x68) == 0x08) {
+        return true;
+    }
+    return false;
+}
+
+
+int dht20_read_data(float *temperature, float *humidity)
+{
+
+    uint8_t txbuf[3] = {0xAC, 0x33, 0x00};             
+    uint8_t status_byte[1] = { 0 };                  
+    uint8_t rxdata[6] = {0};                         
+    int wait_time = 0;
+    I2C_write_bytes(DHT20_I2C_ADDRESS, txbuf, sizeof(txbuf));
+    vTaskDelay( 80 / portTICK_PERIOD_MS);                
+    do {
+        I2C_read_bytes(DHT20_ADDR, status_byte, sizeof(status_byte));
+        if((status_byte[0] >> 7) == 0){
+            break;
+        }
+        wait_time += DHT20_CHECK_BUSY_DELAY_MS;
+        if (wait_time >= DHT20_MAX_BUSY_WAIT_MS) {
+            ESP_LOGE(__func__, "Sensor is busy for too long");
+            return ESP_FAIL;
+        }
+        vTaskDelay(pdMS_TO_TICKS(DHT20_CHECK_BUSY_DELAY_MS));
+    } while(1);
+
+
+    I2C_read_bytes(DHT20_I2C_ADDRESS, rxdata, 7);              
+
+    uint8_t get_crc = dht20_crc8(rxdata, sizeof(rxdata));                    
+
+    if (rxdata[6] == get_crc) {                               
+        if(humidity){
+            uint32_t raw_humid = rxdata[1];
+            raw_humid <<= 8;
+            raw_humid += rxdata[2];
+            raw_humid <<= 4;
+            raw_humid += rxdata[3] >> 4;
+            *humidity = (float)(raw_humid / 1048576.0f) * 100.0f;                                      // convert RAW to Humidity in %
+        }
+        if(temperature){
+            uint32_t raw_temp = (rxdata[3] & 0x0F);
+            raw_temp <<= 8;
+            raw_temp += rxdata[4];
+            raw_temp <<= 8;
+            raw_temp += rxdata[5];
+            *temperature = (float)(raw_temp / 1048576.0f) * 200.0f - 50.0f;
+        }
+        return ESP_OK;
+    } 
+
+    ESP_LOGE(__func__, "CRC Checksum failed !!!");
+    return ESP_ERR_INVALID_CRC;
+}
+
+static uint8_t dht20_crc8(uint8_t *message, uint8_t Num)
+{
+    static uint8_t i;
+    static uint8_t byte;
+    uint8_t crc = 0xFF;
+    for (byte = 0; byte < Num; byte++) {
+        crc ^= (message[byte]);
+        for (i = 8; i > 0; --i) {
+            if (crc & 0x80) {
+                crc = (crc << 1) ^ 0x31;
+            } else {
+                crc = (crc << 1);
+            }
+        }
+    }
+    return crc;
+}

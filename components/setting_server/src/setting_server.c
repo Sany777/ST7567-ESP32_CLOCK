@@ -10,7 +10,7 @@
 #include "string.h"
 #include "portmacro.h"
 #include "clock_module.h"
-#include "additional_functions.h"
+#include "toolbox.h"
 #include "string.h"
 #include "device_macro.h"
 #include "wifi_service.h"
@@ -19,11 +19,11 @@
 
 static httpd_handle_t server;
 
-const char *MES_DATA_NOT_READ = "Data not read";
-const char *MES_DATA_TOO_LONG = "Data too long";
-const char *MES_NO_MEMORY = "No memory";
-const char *MES_BAD_DATA_FOMAT = "wrong data format";
-const char *MES_SUCCESSFUL = "Successful";
+static const char *MES_DATA_NOT_READ = "Data not read";
+static const char *MES_DATA_TOO_LONG = "Data too long";
+static const char *MES_NO_MEMORY = "No memory";
+static const char *MES_BAD_DATA_FOMAT = "wrong data format";
+static const char *MES_SUCCESSFUL = "Successful";
 
 
 
@@ -75,7 +75,6 @@ static esp_err_t get_js_handler(httpd_req_t *req)
 }
 
 
-
 static esp_err_t handler_close(httpd_req_t *req)
 {
     httpd_resp_sendstr(req, "Goodbay!");
@@ -83,7 +82,6 @@ static esp_err_t handler_close(httpd_req_t *req)
     device_clear_state(BIT_SERVER_RUN);
     return ESP_OK;
 }
-
 
 
 static esp_err_t handler_set_network(httpd_req_t *req)
@@ -539,7 +537,6 @@ int init_server(char *server_buf)
     };
     httpd_register_uri_handler(server, &set_loud_uri);
 
-    vTaskDelay(100/portTICK_PERIOD_MS);
     return ESP_OK;
 }
 

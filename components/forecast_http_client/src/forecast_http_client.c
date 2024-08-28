@@ -1,7 +1,9 @@
-#include "clock_http_client.h"
+#include "forecast_http_client.h"
 
 #include "esp_http_client.h"
+#include "clock_module.h"
 #include "device_common.h"
+#include "device_macro.h"
 
 #define SIZE_URL_BUF 250
 #define MAX_KEY_NUM 10
@@ -109,18 +111,19 @@ static void split(char *data_buf, size_t data_size, const char *split_chars_str)
     }
 }
 
+#include "esp_log.h"
 
 int get_weather(const char *city, const char *api_key)
 {
     int res = ESP_FAIL;
-    char **feels_like = NULL, **description = NULL; 
+    char **feels_like_list = NULL, **description = NULL, **pop_list = NULL, **dt_list = NULL; 
 
     if(strnlen(city, MAX_STR_LEN) == 0 || strnlen(api_key, MAX_STR_LEN) != API_LEN)
         return ESP_FAIL;
 
     snprintf(url_buf, SIZE_URL_BUF, 
-    "https://api.openweathermap.org/data/2.5/forecast?q=%s&units=metric&cnt=5&appid=%s", 
-    city, api_key);
+    "https://api.openweathermap.org/data/2.5/forecast?q=%s&units=metric&cnt=%d&appid=%s", 
+    city, BRODCAST_LIST_SIZE, api_key);
 
     esp_http_client_config_t config = {
         .url = url_buf,
@@ -133,36 +136,54 @@ int get_weather(const char *city, const char *api_key)
     };
     esp_http_client_handle_t client = esp_http_client_init(&config);
     esp_http_client_perform(client);
-
     const size_t data_size = esp_http_client_get_content_length(client);
     if(data_size){
+
         network_buf[data_size] = 0;
-        const size_t feels_like_num = get_value_ptrs(&feels_like, network_buf, data_size, "\"feels_like\":");
-        const size_t description_num = get_value_ptrs(&description, network_buf, data_size, "\"description\":\"");
+        
+        const size_t pop_num = get_value_ptrs(&pop_list, network_buf, data_size, "\"pop\":");
+        const size_t feels_like_num = get_value_ptrs(&feels_like_list, network_buf, data_size, "\"feels_like\":");
+        get_value_ptrs(&description, network_buf, data_size, "\"description\":\"");
+        get_value_ptrs(&dt_list, network_buf, data_size,"\"dt\":");
         split(network_buf, data_size, "},\"");
-        if(feels_like_num && description_num){
-            if(description != NULL){
-                strncpy(service_data.desciption, description[0], sizeof(service_data.desciption));
+
+        if(description){
+            size_t desc_len = strnlen(description[0], sizeof(service_data.desciption));
+            if(desc_len){
+                memcpy(service_data.desciption, description[0], desc_len);
+                service_data.desciption[desc_len] = 0;
             }
-            if(feels_like_num && feels_like != NULL){
-                for(int i=0; i<feels_like_num && i<TEMP_LIST_SIZE; ++i){
-                    service_data.temp_list[i] = atof(feels_like[i]);
-                }
-            }
-            res = ESP_OK;
+            free(description);
+            description = NULL;
         }
-        service_data.updated_hour = service_data.cur_min/60;
+
+        if(dt_list){
+            time_t time_now  = atol(dt_list[0]);
+            struct tm * tinfo = localtime(&time_now);
+            service_data.update_data_time = tinfo->tm_hour;
+            free(dt_list);
+            dt_list = NULL;
+        }
+
+        if(feels_like_list){
+            for(int i=0; i<feels_like_num && i<BRODCAST_LIST_SIZE; ++i){
+                service_data.temp_list[i] = atof(feels_like_list[i]);
+            }
+            free(feels_like_list);
+            feels_like_list = NULL;
+        }
+
+        if(pop_list){
+            for(int i=0; i<pop_num && i<BRODCAST_LIST_SIZE; ++i){
+                service_data.pop_list[i] = atof(pop_list[i])*100;
+            }
+            free(pop_list);
+            pop_list = NULL;
+        }
+        res = ESP_OK;
     }
     
     esp_http_client_cleanup(client);
-    if(description){
-        free(description);
-        description = NULL;
-    }
-    if(feels_like){
-        free(feels_like);
-        feels_like = NULL;
-    }
 
     return res;
 }

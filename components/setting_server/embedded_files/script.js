@@ -4,8 +4,8 @@ const ACT_PREF = 'a'
 const LIST_DAY = ['Monday','Thusday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 // [formName [type, max limit, min limit,[inputNames],]]
 const FORMS_LIST = [
-  ['Network',[['text','64','10',['SSID', 'PWD']]]],
-  ['Openweather',[['text','32',,['Key', 'City']]]],
+  ['Network',[['text','32','1',['SSID']],['text','32','8',['PWD']]]],
+  ['Openweather',[['text','32','1',['City']],['text','32','32',['Key']]]],
   ['Update',[['file',,,['Firmware']]]],
   ['Offset',[['number','23','0',['Hour']]]],
   ['Loud',[['number','99','0',['%']]]],
