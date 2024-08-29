@@ -46,11 +46,11 @@ enum TimeoutConst{
 
 
 
-static void timer_func(int cmd_id);
-static void setting_func(int cmd_id);
-static void main_func(int cmd_id);
-static void device_info_func(int cmd_id);
-static void weather_info_func(int cmd_id);
+static void timer_func(int cmd);
+static void setting_func(int cmd);
+static void main_func(int cmd);
+static void device_info_func(int cmd);
+static void weather_info_func(int cmd);
 
 
 typedef void(*handler_func_t)(int);
@@ -66,53 +66,77 @@ static const handler_func_t func_list[] = {
 static const int SCREEN_LIST_SIZE = sizeof(func_list)/sizeof(func_list[0]);
 
 enum {
-    CMD_INC = BUT_SCC,
-    CMD_PRESS = BUT_SWW,
-    CMD_DEC = BUT_DT,
+    NO_DATA = -1,
+    CMD_PRESS,
+    CMD_INC,
+    CMD_DEC,
     CMD_INIT,
     CMD_DEINIT,
     CMD_UPDATE_DATA,
     CMD_UPDATE_TIME,
-    CMD_UPDATE_POS,
+    CMD_UPDATE_ROT_VAL,
     CMD_UPDATE_TIMER_TIME
 };
 
-static int next_screen;
+volatile static int next_screen;
 
+static bool screen_inp;
 
+void backlight_off()
+{
+    device_set_pin(PIN_LCD_BACKLIGHT_EN, 0);
+    screen_inp = false;
+    remove_task(backlight_off);
+}
+
+void backlight_on()
+{
+    device_set_pin(PIN_LCD_BACKLIGHT_EN, 1);
+    screen_inp = true;
+    create_periodic_task(backlight_off, 45, 1);
+}
 
 
 static void main_task(void *pv)
 {
     unsigned bits;
-    int cmd;
+    int cmd = NO_DATA;
 
     int screen = -1;
-    uint64_t sleep_time_ms, working_time;
-    next_screen = SCREEN_MAIN;
-    bool but_input, exit;
+    uint64_t sleep_time_ms;
+    bool wait_task;
     int timeout = TIMEOUT_6_SEC;
     device_set_state(BIT_UPDATE_FORECAST_DATA);
     vTaskDelay(100/portTICK_PERIOD_MS);
-
     for(;;){
-
-        but_input = exit = false;
+        wait_task = true;
+        next_screen = SCREEN_MAIN;
         restart_timer();
         do{
-            cmd = device_get_joystick_btn();
-
-            if(cmd != NO_DATA){
-                if(!but_input){
-                    but_input = true;
-                } else if(cmd == CMD_PRESS){
-                    ++next_screen;
-                }
-            }
+            
+            cmd = NO_DATA;
 
             bits = device_get_state();
 
+            if(bits&BIT_BUT_LONG_PRESSED){
+                if(screen_inp){
+                    backlight_off();
+                } else {
+                    backlight_on();
+                }
+                device_clear_state(BIT_BUT_LONG_PRESSED);
+            }
 
+            if(bits&BIT_ENCODER_ROTATE){
+                start_single_signale(10, 2000);
+                if(screen_inp){
+                    next_screen += get_encoder_val();
+                    reset_encoder_val();
+                } else {
+                    cmd = CMD_UPDATE_ROT_VAL;
+                }
+                device_clear_state(BIT_ENCODER_ROTATE);
+            }
 
             if(screen != next_screen) {
                 if(next_screen >= SCREEN_LIST_SIZE){
@@ -133,40 +157,32 @@ static void main_task(void *pv)
                         start_signale_series(75, 7, 2000);
                     }
                 }
-            } else if( ! (bits&BIT_WAIT_SIGNALE)
-                        && ! (bits&BIT_WAIT_BUT_INPUT)
-                            && ! (bits&BIT_WAIT_PROCCESS)
-                                && get_timer_ms() > timeout){
-                exit = true;
+            } else if( ! screen_inp
+                        && ! (bits&BIT_WAIT_SIGNALE)
+                            && ! (bits&BIT_WAIT_BUT_INPUT)
+                                && ! (bits&BIT_WAIT_PROCCESS)
+                                    && get_timer_ms() > timeout){
+                wait_task = false;
                 cmd = CMD_UPDATE_DATA;
             }
             
             if(cmd != NO_DATA){
-                // epaper_clear(UNCOLORED); 
+                lcd_fill(UNCOLORED);
                 func_list[screen](cmd);
-                bits = device_get_state();
-                if(exit){
-                    // epaper_display_all();
-                } else {
-                    // epaper_display_part();
-                }
-                vTaskDelay(250/portTICK_PERIOD_MS);
-                // epaper_wait();
+                lcd_update();
             }
 
             vTaskDelay(250/portTICK_PERIOD_MS);
 
-        } while(! exit);
+        } while(wait_task);
 
         wifi_stop();
-        
-
-            sleep_time_ms = ONE_MINUTE - get_timer_ms()%ONE_MINUTE;
-            device_set_pin(DHT20_EN_PIN, 0);
-            esp_sleep_enable_timer_wakeup(sleep_time_ms * 1000);
-            esp_sleep_enable_ext0_wakeup((gpio_num_t)GPIO_WAKEUP_PIN, 1);
-            esp_light_sleep_start();
-            device_set_pin(DHT20_EN_PIN, 1);    
+        sleep_time_ms = ONE_MINUTE - get_timer_ms()%ONE_MINUTE;
+        device_set_pin(PIN_DHT20_EN, 0);
+        esp_sleep_enable_timer_wakeup(sleep_time_ms * 1000);
+        esp_sleep_enable_ext0_wakeup((gpio_num_t)PIN_WAKEUP, 1);
+        esp_light_sleep_start();
+        device_set_pin(PIN_DHT20_EN, 1);    
     }
 }
 
@@ -296,44 +312,27 @@ void time_periodic_task()
     device_set_state(BIT_NEW_MIN);
 }
 
-static void timer_func(int cmd_id)
+static void timer_func(int cmd)
 {
     static int init_val = 0;
     static bool timer_run = false;
     float t;
-    bool set_timer_state = timer_run;
 
-    if(cmd_id == CMD_INC) {
-        init_val = timer_counter = (init_val/5)*5 + 5;
-        set_timer_state = true;
-    } else if(cmd_id == CMD_DEC){
-        if(init_val){
-            if(init_val <= 5){
-                init_val -= 1;
-            } else {
-                init_val = (init_val/5)*5 - 5;
-            }
-        }
-        timer_counter = init_val;
-        set_timer_state = true;
-    } 
-
-
-
-    if(timer_run != set_timer_state){
-        if(set_timer_state){
+    if(cmd == CMD_INC || cmd == CMD_DEC) {
+        init_val = timer_counter += get_encoder_val();
+        reset_encoder_val();
+    } else if(cmd == CMD_PRESS){
+        timer_run = !timer_run;
+        if(timer_run){
             restart_timer();
             create_periodic_task(time_periodic_task, 60, FOREVER);
-        }else{
+        } else {
             remove_task(time_periodic_task);
         }
-        timer_run = set_timer_state;
     }
 
-    // epaper_printf_centered(35, FONT_SIZE_34, COLORED, snprintf_time("%H:%M"));
-    if(dht20_read_data(&t, NULL) == ESP_OK){
-        // epaper_printf_centered(175, FONT_SIZE_20, COLORED, "%.1fC*", t);
-    }
+    dht20_read_data(&t, NULL);
+    lcd_printf_centered(15,FONT_SIZE_9, COLORED, "%s %.1fC*", snprintf_time("%H:%M"), t);
     
     if(timer_run){
         if(timer_counter <= 0){
@@ -346,124 +345,116 @@ static void timer_func(int cmd_id)
     }
 
     if(timer_counter){
-       
-        // epaper_printf_centered(90, FONT_SIZE_64, UNCOLORED, "%i", timer_counter);
-        if(timer_run){
-            // epaper_print_centered_str(145, FONT_SIZE_20, UNCOLORED, "min");
-        } else {
-            // epaper_print_centered_str(145, FONT_SIZE_20, UNCOLORED, "Pausa");
-        }
+        lcd_printf_centered(30, FONT_SIZE_18, COLORED, "%i", timer_counter);
+        lcd_print_centered_str(50, FONT_SIZE_9, COLORED, timer_run ? "min" : "Pausa");
     } else {
-        // epaper_print_centered_str(90, FONT_SIZE_48, COLORED, "Stop");
+        lcd_print_centered_str(30, FONT_SIZE_18, COLORED, "Stop");
     }
 }
 
 
-static void setting_func(int cmd_id)
+static void setting_func(int cmd)
 {
     unsigned bits = device_get_state();
-
+    
+    if(cmd == CMD_UPDATE_ROT_VAL){
+        cmd = get_encoder_val() > 0 ? CMD_INC : CMD_DEC;
+        reset_encoder_val();
+    }
     if(bits&BIT_SERVER_RUN){
-        if(cmd_id == CMD_INC){
+        if(cmd == CMD_INC){
             device_clear_state(BIT_SERVER_RUN|BIT_START_SERVER);
         }
-        // epaper_print_centered_str(20, FONT_SIZE_20, COLORED, "Server run!");
-        // epaper_print_centered_str(40, FONT_SIZE_20, COLORED, "http://192.168.4.1");
-        // epaper_print_centered_str(60, FONT_SIZE_20, COLORED, "SSID:" CONFIG_WIFI_AP_SSID);
-        // epaper_print_centered_str(80, FONT_SIZE_20, COLORED, "Password:" CONFIG_WIFI_AP_PASSWORD);
+        lcd_print_str(5, 10, FONT_SIZE_9, COLORED, "Server run!");
+        lcd_print_str(5, 12, FONT_SIZE_9, COLORED, "http://192.168.4.1");
+        lcd_print_str(5, 24, FONT_SIZE_9, COLORED, "SSID:" CONFIG_WIFI_AP_SSID);
+        lcd_print_str(5, 36, FONT_SIZE_9, COLORED, "Password:" CONFIG_WIFI_AP_PASSWORD);
     } else {
-        if(cmd_id == CMD_DEC){
+        if(cmd == CMD_DEC){
             device_set_state(BIT_START_SERVER|BIT_WAIT_PROCCESS);
         }
-        // epaper_print_centered_str(40, FONT_SIZE_20, COLORED, "Press button");
-        // epaper_print_centered_str(60, FONT_SIZE_20, COLORED, "for starting");
-        // epaper_print_centered_str(80, FONT_SIZE_20, COLORED, "settings server");
+        lcd_print_str(5, 12, FONT_SIZE_9, COLORED, "Press button");
+        lcd_print_str(5, 24, FONT_SIZE_9, COLORED, "for starting");
+        lcd_print_str(5, 36, FONT_SIZE_9, COLORED, "settings server");
     }
 }
 
 
-static void main_func(int cmd_id)
+static void main_func(int cmd)
 {
-    float t, hum;
+    float t;
     unsigned bits = device_get_state();
 
-
-    if(cmd_id == CMD_DEC || cmd_id == CMD_INC){
+    if(cmd == CMD_DEC || cmd == CMD_INC){
         device_set_state(BIT_UPDATE_FORECAST_DATA);
     }
 
-    if(cmd_id == CMD_UPDATE_TIME && adc_reader_get_voltage() < 3.5f){
-        // epaper_printf(10, 10, FONT_SIZE_16, COLORED, "BAT!");
+    if(cmd == CMD_UPDATE_TIME && adc_reader_get_voltage() < 3.5f){
+        lcd_printf(1, 1, FONT_SIZE_9, COLORED, "B");
     }
-
-    if(dht20_read_data(&t, &hum) == ESP_OK){
-
+    if(dht20_read_data(&t, NULL) == ESP_OK){
+        lcd_printf(10, 7, FONT_SIZE_9, COLORED, "%.1fC*", t);
+        lcd_draw_house(9, 6, 49, 10, COLORED);
     }
     if(bits & BIT_FORECAST_OK){
-        // epaper_printf_centered(75, FONT_SIZE_24, COLORED, "%.1fC* R:%d%%", 
-                        // service_data.temp_list[0], 
-                        // (service_data.pop_list[0] + service_data.pop_list[1])/2);
-        // epaper_print_centered_str(100, FONT_SIZE_34, COLORED, 
-                        // service_data.desciption);
+        lcd_printf(65, 8, FONT_SIZE_9, COLORED, "%.1fC*", service_data.temp_list[0]);
+        lcd_print_centered_str(20, FONT_SIZE_9, COLORED, service_data.desciption);
     }
     if(bits & BIT_IS_TIME) {
-        // epaper_printf_centered(125, FONT_SIZE_48, COLORED, snprintf_time("%H:%M"));
-        // epaper_printf_centered(172, FONT_SIZE_24, COLORED, snprintf_time("%d %a"));
+        lcd_print_centered_str(30, FONT_SIZE_18, COLORED, snprintf_time("%H:%M"));
+        lcd_print_centered_str(50, FONT_SIZE_9, COLORED, snprintf_time("%d %a"));
     } else {
-        // epaper_printf_centered(125, FONT_SIZE_48, COLORED, snprintf_time("--:--"));
+        lcd_print_centered_str(35, FONT_SIZE_18, COLORED, snprintf_time("--:--"));
     }
 }
 
 
-static void device_info_func(int cmd_id)
+static void device_info_func(int cmd)
 {
     unsigned bits = device_get_state();
 
-    // epaper_printf(5, 30, FONT_SIZE_20, COLORED, "Battery:%.2fV", adc_reader_get_voltage());
+    lcd_printf(5, 7, FONT_SIZE_9, COLORED, "Battery:%.2fV", adc_reader_get_voltage());
     if(bits&BIT_IS_STA_CONNECTION){
-        // epaper_print_str(5, 60, FONT_SIZE_20, UNCOLORED, "STA:enable");
+        lcd_print_str(5, 20, FONT_SIZE_9, UNCOLORED, "STA:enable");
     } else {
-        // epaper_print_str(5, 60, FONT_SIZE_20, COLORED, "STA:disable");
+        lcd_print_str(5, 20, FONT_SIZE_9, COLORED, "STA:disable");
     }
     if(bits&BIT_IS_AP_CONNECTION){
-        // epaper_print_str(5, 90, FONT_SIZE_20, UNCOLORED, "AP:enable");
+        lcd_print_str(5, 30, FONT_SIZE_9, UNCOLORED, "AP:enable");
     } else {
-        // epaper_print_str(5, 90, FONT_SIZE_20, COLORED, "AP:disable");
+        lcd_print_str(5, 30, FONT_SIZE_9, COLORED, "AP:disable");
     }
     if(bits&BIT_SNTP_OK){
-        // epaper_print_str(5, 120, FONT_SIZE_20, UNCOLORED, "SNTP:enable");
+        lcd_print_str(5, 40, FONT_SIZE_9, UNCOLORED, "SNTP:enable");
     } else {
-        // epaper_print_str(5, 120, FONT_SIZE_20, COLORED, "SNTP:disable");
+        lcd_print_str(5, 40, FONT_SIZE_9, COLORED, "SNTP:disable");
     }
     if(bits&BIT_FORECAST_OK){
-        // epaper_print_str(5, 150, FONT_SIZE_20, UNCOLORED, "Openweath.:Ok");
+        lcd_print_str(5, 50, FONT_SIZE_9, UNCOLORED, "Openweath.:Ok");
     } else {
-        // epaper_print_str(5, 150, FONT_SIZE_20, COLORED, "Openweath.:Nok");
+        lcd_print_str(5, 50, FONT_SIZE_9, COLORED, "Openweath.:Nok");
     }
 }
 
 
-static void weather_info_func(int cmd_id)
+static void weather_info_func(int cmd)
 {
     int dt = service_data.update_data_time;
 
-    if(cmd_id == CMD_INC || cmd_id == CMD_DEC){
+    if(cmd == CMD_INC || cmd == CMD_DEC){
         device_set_state(BIT_UPDATE_FORECAST_DATA);
     }
     if(device_get_state()&BIT_FORECAST_OK ){
-        // epaper_print_centered_str(15, FONT_SIZE_20, COLORED, service_data.desciption);
+        lcd_print_centered_str(1, FONT_SIZE_9, COLORED, service_data.desciption);
     } else {
-        // epaper_printf_centered(15, FONT_SIZE_20, COLORED, "last update %d:00", dt);
+        lcd_printf_centered(1, FONT_SIZE_9, COLORED, "Last update %d:00!", dt);
     }
-    // draw_rect(0,44,200, 61, COLORED, true);
-    // epaper_print_str(10, 47, FONT_SIZE_12, UNCOLORED, "hour    temp       rain");
     for(int i=0; i<BRODCAST_LIST_SIZE; ++i){
         if(dt>23)dt %= 24;
-        // epaper_printf(6, 70+i*25, FONT_SIZE_20, COLORED, "%c%c|%.1fC*|%d%%", 
-                            // dt>10 ? (dt/10)+'0':' ', 
-                            // (dt%10) + '0',
-                            // service_data.temp_list[i],
-                            // service_data.pop_list[i]);
+        lcd_printf(dt >9 ? 1 : 9, 12+i*10, FONT_SIZE_9, COLORED, "%d:00   %.1fC*  %d%%", 
+                            dt,
+                            service_data.temp_list[i],
+                            service_data.pop_list[i]);
         dt += 3;
     }
 }

@@ -49,9 +49,7 @@ static void update_time_handler()
 
 void device_set_offset(int time_offset)
 {
-    if(main_data.flags & BIT_OFFSET_ENABLE){
-        set_offset(time_offset - main_data.time_offset);
-    }
+    set_offset(time_offset - main_data.time_offset);
     main_data.time_offset = time_offset;
     changes_main_data = true;
 }
@@ -240,32 +238,33 @@ bool is_signale(struct tm *tm_info)
 
 
 
-void device_common_init()
+void device_init()
 {
     clock_event_group = xEventGroupCreate();
-    device_set_pin(DHT20_EN_PIN, 0);
+    device_set_pin(PIN_DHT20_EN, 0);
     vTaskDelay(pdMS_TO_TICKS(500));
     I2C_init();
-    device_set_pin(DHT20_EN_PIN, 1);
+    device_set_pin(PIN_DHT20_EN, 1);
     vTaskDelay(pdMS_TO_TICKS(750));
     read_data();
     wifi_init();
     lcd_init();
     adc_reader_init();
-    device_gpio_init();
+    init_encoder();
     create_periodic_task(update_time_handler, 1, FOREVER);
+    device_set_pin(PIN_LCD_BACKLIGHT_EN, 0);
 }
 
 
 
-void  set_bit_from_isr(unsigned bits)
+void device_set_state_isr(unsigned bits)
 {
     BaseType_t pxHigherPriorityTaskWoken;
     xEventGroupSetBitsFromISR(clock_event_group, (EventBits_t)bits, &pxHigherPriorityTaskWoken);
     portYIELD_FROM_ISR( pxHigherPriorityTaskWoken );
 }
 
-void  clear_bit_from_isr(unsigned bits)
+void  device_clear_state_isr(unsigned bits)
 {
     xEventGroupClearBitsFromISR(clock_event_group, (EventBits_t)bits);
 }

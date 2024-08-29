@@ -33,7 +33,7 @@ static ledc_channel_config_t ledc_channel = {
     .channel        = LEDC_CHANNEL,
     .timer_sel      = LEDC_TIMER,
     .intr_type      = LEDC_INTR_DISABLE,
-    .gpio_num       = SIG_OUT_PIN,
+    .gpio_num       = PIN_SIG_OUT,
     .duty           = 0, 
     .hpoint         = 0
 };

@@ -10,6 +10,7 @@
 #include "freertos/task.h"
 #include "portmacro.h"
 
+#include "device_common.h"
 
 #define LCD_DISPLAY_ON 					0xAF
 #define LCD_DISPLAY_OFF					0xAE
@@ -109,7 +110,7 @@ void lcd_init(void)
 	
 	gpio_set_direction(PIN_NUM_DC, GPIO_MODE_OUTPUT);
 	gpio_set_direction(PIN_NUM_RST, GPIO_MODE_OUTPUT);
-	gpio_set_direction(PIN_LCD_EN, GPIO_MODE_OUTPUT);
+	gpio_set_direction(PIN_LCD_BACKLIGHT_EN, GPIO_MODE_OUTPUT);
 	lcd_reset();
 
 	lcd_send_cmd(LCD_BIAS7);
@@ -166,32 +167,19 @@ void lcd_draw_pixel(uint8_t x, uint8_t y, color_t color)
 	}
 }
 
-void lcd_drawV_line(uint8_t x, color_t color) 
+void lcd_draw_ver_line(uint8_t hor, int ver, int height, color_t color)  
 {
-	if(color == COLORED) {
-		for(int y = 0; y < LCD_PAGES; ++y) {
-			screen_buf[x + y * LCD_WIDTH] |= 0xff;
-		}
-	}
-	else {
-		for(int y = 0; y < LCD_PAGES; ++y) {
-			screen_buf[x + y * LCD_WIDTH] &= 0;
-		}
+	const int botom = ver+height;
+	for(int x = hor, y = ver; y<LCD_HEIGHT && y<botom; ++y) {
+		lcd_draw_pixel(x, y, color);
 	}
 }
 
-void lcd_draw_hor_line(uint8_t y, color_t color) 
+void lcd_draw_hor_line(uint8_t hor, int ver, int width, color_t color) 
 {
-	uint8_t val = 1 << (y % 8);
-	if(color == COLORED) {
-		for(int x = 0; x < LCD_WIDTH; ++x) {
-			screen_buf[x + (y / 8) * LCD_WIDTH] |= val;
-		}
-	}
-	else {
-		for(int x = 0; x < LCD_WIDTH; ++x) {
-			screen_buf[x + (y / 8) * LCD_WIDTH] &= ~(val);
-		}
+	const int right = width + hor;
+	for(int x = hor, y = ver; x < LCD_WIDTH && x<right; ++x) {
+		lcd_draw_pixel(x, y, color);
 	}
 }
 
@@ -209,10 +197,8 @@ static void lcd_write_char(char ch, fontStyle_t *font, color_t color)
 	else {
 		ch -= font->FirstAsciiCode;
 	}
-	// check remaining space on the current line
 	if (LCD_WIDTH < (lcd.curr_x + font->GlyphWidth[(int)ch]) ||
 		LCD_HEIGHT < (lcd.curr_y + font->GlyphWidth[(int)ch])) {
-		// not enough space
 		return;
 	}
 
@@ -244,30 +230,56 @@ static void lcd_write_char(char ch, fontStyle_t *font, color_t color)
 }
 
 
-
-
-void lcd_print_str(uint8_t x, uint8_t y, int font_size, color_t color, const char *str) 
+void lcd_print_centered_str(uint8_t ver, font_size_t font_size, color_t color, char *str)
 {
-	lcd_set_cursor(x,y);
-	fontStyle_t *font;
-	if(font_size == 9){
-		font = &FontStyle_RetroVilleNC_9;
+	uint8_t hor;
+	fontStyle_t *font = font_size == FONT_SIZE_18 ? &FontStyle_videotype_18 : &FontStyle_RetroVilleNC_9;
+	if(font_size == FONT_SIZE_18){
+		hor = (LCD_WIDTH - strlen(str)*10) / 2;
 	} else {
-		font = &FontStyle_videotype_18;
+		hor = (LCD_WIDTH - strlen(str)*6.5) / 2;
 	}
+	if(hor < 0){
+		hor = 0;
+	}
+	lcd_set_cursor(hor, ver);
 	while(*str) {
 		lcd_write_char(*str++, font, color);
 	}
 }
 
 
-void lcd_printf(int hor, int ver, int font_size, color_t colored, const char *format, ...)
+void lcd_print_str(uint8_t hor, uint8_t ver, font_size_t font_size, color_t color,  char *str) 
+{
+	fontStyle_t *font;
+	if(font_size == FONT_SIZE_18){
+		font = &FontStyle_videotype_18;
+	} else {
+		font = &FontStyle_RetroVilleNC_9;
+	}
+	lcd_set_cursor(hor,ver);
+	while(*str) {
+		lcd_write_char(*str++, font, color);
+	}
+}
+
+
+void lcd_printf(int hor, int ver, font_size_t font_size, color_t colored, const char *format, ...)
 {
     va_list args;
     va_start (args, format);
     vsnprintf (text_buf, sizeof(text_buf), format, args);
     va_end (args);
     lcd_print_str(hor, ver, font_size, colored, text_buf);
+}
+
+void lcd_printf_centered(int ver, font_size_t font_size, color_t colored, const char *format, ...)
+{
+    va_list args;
+    va_start (args, format);
+    vsnprintf (text_buf, sizeof(text_buf), format, args);
+    va_end (args);
+    lcd_print_centered_str(ver, font_size, colored, text_buf);
 }
 
 
@@ -331,6 +343,22 @@ void lcd_draw_rectangle(int x, int y, int width, int height,  color_t color)
     }
 }
 
+void lcd_draw_house(int h, int v, int width, int height, color_t color)
+{
+	int top = v - height;
+	if(top < 0)top = 0;
+	int l = h, r = h+width, y = v;
+	for(; y >= top && y > 0 && y > top;  --r, ++l, --y){
+		lcd_draw_pixel(r, y, color);
+		lcd_draw_pixel(l, y, color);
+	}
+	lcd_draw_hor_line(l, top, r-l+1, color);
+	lcd_draw_hor_line(h, v, width, color);
+	lcd_draw_hor_line(h, v+height, width, color);
+	lcd_draw_ver_line(h, v, height, color);
+	lcd_draw_ver_line(h+width, v, height, color);
+}
+
 
 void lcd_set_contrast(uint8_t val) 
 {
@@ -338,12 +366,3 @@ void lcd_set_contrast(uint8_t val)
 	lcd_send_cmd((val & 0x3f));
 }
 
-void test_lcd()
-{
-	lcd_fill(COLORED);
-	lcd_set_contrast(0x0);
-	// lcd_draw_string(0, 0, "Hello, World!");
-	lcd_draw_circle(64, 32, 20, COLORED);
-	lcd_draw_rectangle(20, 20, 40, 40, COLORED);
-	lcd_update();
-}

@@ -6,10 +6,9 @@ const LIST_DAY = ['Monday','Thusday','Wednesday','Thursday','Friday','Saturday',
 const FORMS_LIST = [
   ['Network',[['text','32','1',['SSID']],['text','32','8',['PWD']]]],
   ['Openweather',[['text','32','1',['City']],['text','32','32',['Key']]]],
-  ['Update',[['file',,,['Firmware']]]],
   ['Offset',[['number','23','0',['Hour']]]],
   ['Loud',[['number','99','0',['%']]]],
-  ['Status',[['checkbox',3,,['Notifications','STA disable', 'Offset activate', 'Openweather ok','SNTP ok']]]]
+  ['Status',[['checkbox',3,,['Notifications','Openweather ok','SNTP ok']]]]
 ];
 
 const modal = window.document.getElementById('modal');
@@ -241,9 +240,6 @@ function sendData(formName)
             if(data == null)
               data = js;
             js[child.name] = value;
-        } else if(child.type === 'file'){
-            data = child.files[0];
-            break;
         } else if(child.type === 'time'){
             const day = Number(child.name.split('t')[0]);
             ++schema[day];
