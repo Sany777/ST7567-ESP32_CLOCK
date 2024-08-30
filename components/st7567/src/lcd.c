@@ -51,7 +51,7 @@ typedef struct {
 static uint8_t screen_buf[LCD_BUFFER_SIZE];
 static lcd_pos_t lcd;
 static spi_device_handle_t spi;
-static char text_buf[150];
+static char text_buf[50];
 
 
 static void lcd_write_char(char ch, fontStyle_t *font, color_t color);
@@ -167,19 +167,29 @@ void lcd_draw_pixel(uint8_t x, uint8_t y, color_t color)
 	}
 }
 
-void lcd_draw_ver_line(uint8_t hor, int ver, int height, color_t color)  
+void lcd_draw_line(uint8_t hor, int ver, int len, color_t color, direction_t direction, int gap)  
 {
-	const int botom = ver+height;
-	for(int x = hor, y = ver; y<LCD_HEIGHT && y<botom; ++y) {
-		lcd_draw_pixel(x, y, color);
-	}
-}
-
-void lcd_draw_hor_line(uint8_t hor, int ver, int width, color_t color) 
-{
-	const int right = width + hor;
-	for(int x = hor, y = ver; x < LCD_WIDTH && x<right; ++x) {
-		lcd_draw_pixel(x, y, color);
+	int edge;
+	int x = hor, y = ver;
+	const int step = gap + 1;
+	if(direction == HORISONTAL){
+		edge = hor + len;
+		if(edge>LCD_WIDTH) {
+			edge = LCD_WIDTH;
+		}
+		while(x<edge){
+			lcd_draw_pixel(x, y, color);
+			x += step;
+		}
+	} else {
+		edge = ver+len;
+		if(edge>LCD_HEIGHT){
+			edge = LCD_HEIGHT;
+		}
+		while(y<edge){
+			lcd_draw_pixel(x, y, color);
+			y += step;
+		}
 	}
 }
 
@@ -230,26 +240,26 @@ static void lcd_write_char(char ch, fontStyle_t *font, color_t color)
 }
 
 
-void lcd_print_centered_str(uint8_t ver, font_size_t font_size, color_t color, char *str)
+void lcd_print_centered_str(uint8_t ver, font_size_t font_size, color_t color, const char *str)
 {
+	const int FONT_18_WIDTH = 10;
+	const int FONT_9_WIDTH = 7;
 	uint8_t hor;
 	fontStyle_t *font = font_size == FONT_SIZE_18 ? &FontStyle_videotype_18 : &FontStyle_RetroVilleNC_9;
 	if(font_size == FONT_SIZE_18){
-		hor = (LCD_WIDTH - strlen(str)*10) / 2;
+		hor = (LCD_WIDTH - strnlen(str, LCD_WIDTH/FONT_18_WIDTH)*FONT_18_WIDTH) / 2;
 	} else {
-		hor = (LCD_WIDTH - strlen(str)*6.5) / 2;
+		hor = (LCD_WIDTH - strnlen(str, LCD_WIDTH/FONT_9_WIDTH)*FONT_9_WIDTH) / 2;
 	}
-	if(hor < 0){
-		hor = 0;
-	}
+
 	lcd_set_cursor(hor, ver);
 	while(*str) {
-		lcd_write_char(*str++, font, color);
+		lcd_write_char(*(str++), font, color);
 	}
 }
 
 
-void lcd_print_str(uint8_t hor, uint8_t ver, font_size_t font_size, color_t color,  char *str) 
+void lcd_print_str(uint8_t hor, uint8_t ver, font_size_t font_size, color_t color, const char *str) 
 {
 	fontStyle_t *font;
 	if(font_size == FONT_SIZE_18){
@@ -259,7 +269,7 @@ void lcd_print_str(uint8_t hor, uint8_t ver, font_size_t font_size, color_t colo
 	}
 	lcd_set_cursor(hor,ver);
 	while(*str) {
-		lcd_write_char(*str++, font, color);
+		lcd_write_char(*(str++), font, color);
 	}
 }
 
@@ -345,18 +355,19 @@ void lcd_draw_rectangle(int x, int y, int width, int height,  color_t color)
 
 void lcd_draw_house(int h, int v, int width, int height, color_t color)
 {
-	int top = v - height;
-	if(top < 0)top = 0;
-	int l = h, r = h+width, y = v;
-	for(; y >= top && y > 0 && y > top;  --r, ++l, --y){
+	int top = v - height/2;
+	if(top < 0)
+		top = 0;
+	int step = width/height + 1;
+	for(int l = h, r = h+width, y = v; y > top; --y){
 		lcd_draw_pixel(r, y, color);
 		lcd_draw_pixel(l, y, color);
+		r -= step;
+		l += step;
 	}
-	lcd_draw_hor_line(l, top, r-l+1, color);
-	lcd_draw_hor_line(h, v, width, color);
-	lcd_draw_hor_line(h, v+height, width, color);
-	lcd_draw_ver_line(h, v, height, color);
-	lcd_draw_ver_line(h+width, v, height, color);
+	lcd_draw_line(h, v+height, width, color, HORISONTAL, 1);
+	lcd_draw_line(h, v, height, color, VERTICAL, 1);
+	lcd_draw_line(h+width, v, height, color, VERTICAL, 1);
 }
 
 

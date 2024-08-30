@@ -11,7 +11,7 @@
 #include "driver/gpio.h"
 
 
-
+static void end_wait_but_inp();
 
 volatile int encoder_value = 0;
 
@@ -46,7 +46,8 @@ static void IRAM_ATTR encoder_isr_handler(void* arg)
             } else {           
                 encoder_value--;
             }
-            device_set_state_isr(BIT_ENCODER_ROTATE);
+            device_set_state_isr(BIT_ENCODER_ROTATE|BIT_WAIT_BUT_INPUT);
+            create_periodic_isr_task(end_wait_but_inp, 3000, 1);
             counter = 0;
         }
     }

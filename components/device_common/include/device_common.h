@@ -64,7 +64,7 @@ typedef struct {
     int cur_sec;
     int update_data_time;
     int pop_list[BRODCAST_LIST_SIZE];
-    float temp_list[BRODCAST_LIST_SIZE];
+    int temp_list[BRODCAST_LIST_SIZE];
 } service_data_t;
 
 // --------------------------------------- GPIO
