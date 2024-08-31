@@ -47,7 +47,7 @@ static void IRAM_ATTR encoder_isr_handler(void* arg)
                 encoder_value--;
             }
             device_set_state_isr(BIT_ENCODER_ROTATE|BIT_WAIT_BUT_INPUT);
-            create_periodic_isr_task(end_wait_but_inp, 3000, 1);
+            create_periodic_isr_task(end_wait_but_inp, 5000, 1);
             counter = 0;
         }
     }
@@ -77,7 +77,7 @@ static void end_but_input()
             device_set_state_isr(BIT_BUT_PRESSED);
         }
         remove_isr_task(end_but_input);
-        create_periodic_isr_task(end_wait_but_inp, 3000, 1);
+        create_periodic_isr_task(end_wait_but_inp, 5000, 1);
     } else {
         but_count += 1;
     }

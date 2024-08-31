@@ -22,7 +22,7 @@ enum BasicConst{
 };
 
 enum Bits{
-    BIT_NOTIF_DISABLE           = (1<<0),
+    BIT_NOTIF_ENABLE            = (1<<0),
     BIT_FORECAST_OK             = (1<<1),
     BIT_SNTP_OK                 = (1<<2),
     BIT_ERR_SSID_NO_FOUND       = (1<<3),
@@ -43,7 +43,7 @@ enum Bits{
     BIT_WAIT_SIGNALE            = (1<<18),
     BIT_BUT_LONG_PRESSED        = (1<<19),
     // BIT_WAIT_BACKLIGHT          = (1<<20),
-    STORED_FLAGS                = (BIT_NOTIF_DISABLE),
+    STORED_FLAGS                = (BIT_NOTIF_ENABLE),
 };
 
 typedef struct {

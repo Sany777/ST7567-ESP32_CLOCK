@@ -216,13 +216,13 @@ static int read_data()
 
 bool is_signale(struct tm *tm_info)
 {
+    if(tm_info->tm_wday == 0) return false;
     int cur_min = tm_info->tm_hour*60 + tm_info->tm_min;
-    int cur_day = (tm_info->tm_wday +1) % 7;
+    int cur_day = tm_info->tm_wday - 1;
     const unsigned notif_num = main_data.schema[cur_day];
     unsigned *notif_data = main_data.notification;
     if( notif_num && notif_data
-            && cur_min > FORBIDDED_NOTIF_HOUR 
-            && !(main_data.flags&BIT_NOTIF_DISABLE) ){
+            && cur_min > FORBIDDED_NOTIF_HOUR){
         for(int i=0; i<cur_day-1; ++i){
             // set data offset
             notif_data += main_data.schema[i];
@@ -241,18 +241,11 @@ bool is_signale(struct tm *tm_info)
 void device_init()
 {
     clock_event_group = xEventGroupCreate();
-    device_set_pin(PIN_DHT20_EN, 0);
-    vTaskDelay(pdMS_TO_TICKS(500));
-    I2C_init();
-    device_set_pin(PIN_DHT20_EN, 1);
-    vTaskDelay(pdMS_TO_TICKS(750));
-    read_data();
-    wifi_init();
-    lcd_init();
     adc_reader_init();
-    init_encoder();
+    read_data();
+    I2C_init();
+    wifi_init();
     create_periodic_task(update_time_handler, 1, FOREVER);
-    device_set_pin(PIN_LCD_BACKLIGHT_EN, 0);
 }
 
 
