@@ -199,11 +199,16 @@ static void main_task(void *pv)
             next_screen = SCREEN_MAIN;
         }
         wifi_stop();
-        sleep_time_ms = ONE_MINUTE - get_timer_ms()%ONE_MINUTE;
+        sleep_time_ms = ONE_MINUTE - get_timer_ms()%ONE_MINUTE + 1;
         device_set_pin(PIN_DHT20_EN, 0);
         esp_sleep_enable_timer_wakeup(sleep_time_ms * 1000);
         esp_sleep_enable_ext0_wakeup((gpio_num_t)PIN_WAKEUP, 0);
         esp_light_sleep_start();
+        if(get_but_state()){
+            timeout = TIMEOUT_6_SEC;
+        } else {
+            timeout = 1;
+        }
         device_set_pin(PIN_DHT20_EN, 1);    
     }
 }
