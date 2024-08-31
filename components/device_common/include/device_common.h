@@ -12,12 +12,13 @@ extern "C" {
 
 
 enum BasicConst{
+    NO_DATA = -1,
     WEEK_DAYS_NUM           = 7,
     MAX_STR_LEN             = 32,
     API_LEN                 = 32,
     FORBIDDED_NOTIF_HOUR    = 6*60,
     DESCRIPTION_SIZE        = 20,
-    BRODCAST_LIST_SIZE      = 5,
+    FORECAST_LIST_SIZE      = 5,
     NET_BUF_LEN             = 5000,
 };
 
@@ -60,11 +61,11 @@ typedef struct {
 
 
 typedef struct {
-    char desciption[DESCRIPTION_SIZE+1];
     int cur_sec;
     int update_data_time;
-    int pop_list[BRODCAST_LIST_SIZE];
-    int temp_list[BRODCAST_LIST_SIZE];
+    int pop_list[FORECAST_LIST_SIZE];
+    int temp_list[FORECAST_LIST_SIZE];
+    char desciption[FORECAST_LIST_SIZE][DESCRIPTION_SIZE+1];
 } service_data_t;
 
 // --------------------------------------- GPIO

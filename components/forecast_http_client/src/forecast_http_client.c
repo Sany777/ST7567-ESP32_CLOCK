@@ -116,14 +116,14 @@ static void split(char *data_buf, size_t data_size, const char *split_chars_str)
 int get_weather(const char *city, const char *api_key)
 {
     int res = ESP_FAIL;
-    char **feels_like_list = NULL, **description = NULL, **pop_list = NULL, **dt_list = NULL; 
+    char **feels_like_list = NULL, **description_list = NULL, **pop_list = NULL, **dt_list = NULL; 
 
     if(strnlen(city, MAX_STR_LEN) == 0 || strnlen(api_key, MAX_STR_LEN) != API_LEN)
         return ESP_FAIL;
 
     snprintf(url_buf, SIZE_URL_BUF, 
     "https://api.openweathermap.org/data/2.5/forecast?q=%s&units=metric&cnt=%d&appid=%s", 
-    city, BRODCAST_LIST_SIZE, api_key);
+    city, FORECAST_LIST_SIZE, api_key);
 
     esp_http_client_config_t config = {
         .url = url_buf,
@@ -143,18 +143,18 @@ int get_weather(const char *city, const char *api_key)
         
         const size_t pop_num = get_value_ptrs(&pop_list, network_buf, data_size, "\"pop\":");
         const size_t feels_like_num = get_value_ptrs(&feels_like_list, network_buf, data_size, "\"feels_like\":");
-        get_value_ptrs(&description, network_buf, data_size, "\"description\":\"");
+        const size_t description_num = get_value_ptrs(&description_list, network_buf, data_size, "\"description\":\"");
         get_value_ptrs(&dt_list, network_buf, data_size,"\"dt\":");
+
         split(network_buf, data_size, "},\"");
 
-        if(description){
-            size_t desc_len = strnlen(description[0], sizeof(service_data.desciption));
-            if(desc_len){
-                memcpy(service_data.desciption, description[0], desc_len);
-                service_data.desciption[desc_len] = 0;
+        if(description_list){
+            memset(service_data.desciption, 0, sizeof(service_data.desciption));
+            for(int i=0; i<description_num && i<FORECAST_LIST_SIZE; ++i){
+                strncpy(service_data.desciption[i], description_list[i], sizeof(service_data.desciption[0]));
             }
-            free(description);
-            description = NULL;
+            free(description_list);
+            description_list = NULL;
         }
 
         if(dt_list){
@@ -166,7 +166,7 @@ int get_weather(const char *city, const char *api_key)
         }
 
         if(feels_like_list){
-            for(int i=0; i<feels_like_num && i<BRODCAST_LIST_SIZE; ++i){
+            for(int i=0; i<feels_like_num && i<FORECAST_LIST_SIZE; ++i){
                 service_data.temp_list[i] = atof(feels_like_list[i]);
             }
             free(feels_like_list);
@@ -174,7 +174,7 @@ int get_weather(const char *city, const char *api_key)
         }
 
         if(pop_list){
-            for(int i=0; i<pop_num && i<BRODCAST_LIST_SIZE; ++i){
+            for(int i=0; i<pop_num && i<FORECAST_LIST_SIZE; ++i){
                 service_data.pop_list[i] = atof(pop_list[i])*100;
             }
             free(pop_list);

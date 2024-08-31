@@ -26,8 +26,8 @@
 
 
 static bool changes_main_data, changes_notify_data;
-static settings_data_t main_data;
-service_data_t service_data;
+static settings_data_t main_data = {0};
+service_data_t service_data = {0};
 char network_buf[NET_BUF_LEN];
 
 static EventGroupHandle_t clock_event_group;
@@ -202,6 +202,7 @@ int device_get_offset()
 
 static int read_data()
 {
+    service_data.update_data_time = NO_DATA;
     CHECK_AND_RET_ERR(read_flash(MAIN_DATA_NAME, (unsigned char *)&main_data, sizeof(main_data)));
     device_set_state(main_data.flags&STORED_FLAGS);
     set_loud(main_data.loud);

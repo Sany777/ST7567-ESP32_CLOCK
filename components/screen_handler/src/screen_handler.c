@@ -66,7 +66,7 @@ static const handler_func_t func_list[] = {
 static const int SCREEN_LIST_SIZE = sizeof(func_list)/sizeof(func_list[0]);
 
 enum {
-    NO_DATA = -1,
+
     CMD_PRESS,
     CMD_INC,
     CMD_DEC,
@@ -211,6 +211,17 @@ static void main_task(void *pv)
         }
         device_set_pin(PIN_DHT20_EN, 1);    
     }
+}
+
+static int get_actual_forecast_data_index(const int cur_time_sec)
+{
+    const int cur_hour = cur_time_sec/3600;
+    if(service_data.update_data_time == NO_DATA 
+                || cur_hour - service_data.update_data_time > FORECAST_LIST_SIZE*3){
+            return NO_DATA;
+    }
+    return (cur_hour - service_data.update_data_time) / 3;
+
 }
 
 
@@ -492,10 +503,10 @@ static void main_func(int cmd)
     print_temp_indoor();
 
     unsigned bits = device_get_state();
-    
-    if(bits & BIT_FORECAST_OK){
-        lcd_printf(70, 49, FONT_SIZE_9, COLORED, "%dC*", service_data.temp_list[0]);
-        lcd_print_centered_str(9, FONT_SIZE_9, COLORED, service_data.desciption);
+    int data_indx = get_actual_forecast_data_index(service_data.cur_sec);
+    if(data_indx != NO_DATA){
+        lcd_printf(70, 49, FONT_SIZE_9, COLORED, "%dC*", service_data.temp_list[data_indx]);
+        lcd_print_centered_str(9, FONT_SIZE_9, COLORED, service_data.desciption[data_indx]);
     }
     if(bits & BIT_IS_TIME) {
         lcd_print_centered_str(20, FONT_SIZE_18, COLORED, snprintf_time("%H:%M"));
@@ -555,16 +566,16 @@ static void weather_info_func(int cmd)
         return;
     }
 
-
     if(cmd == CMD_PRESS){
         device_set_state(BIT_UPDATE_FORECAST_DATA);
     }
-    if(device_get_state()&BIT_FORECAST_OK ){
-        lcd_print_centered_str(1, FONT_SIZE_9, COLORED, service_data.desciption);
+    int data_indx = get_actual_forecast_data_index(service_data.cur_sec);
+    if(data_indx != NO_DATA){
+        lcd_print_centered_str(1, FONT_SIZE_9, COLORED, service_data.desciption[data_indx]);
     } else {
-        lcd_printf_centered(1, FONT_SIZE_9, COLORED, "Last update %d:00!", dt);
+        lcd_printf_centered(1, FONT_SIZE_9, COLORED, "Update time %d:00", dt);
     }
-    for(int i=0; i<BRODCAST_LIST_SIZE; ++i){
+    for(int i=0; i<FORECAST_LIST_SIZE; ++i){
         if(dt>23)dt %= 24;
         lcd_printf(dt>9 ? 1 : 9, 
                     14+i*10, 
