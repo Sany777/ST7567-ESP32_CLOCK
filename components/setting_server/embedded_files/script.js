@@ -8,7 +8,7 @@ const FORMS_LIST = [
   ['Openweather',[['text','32','1',['City']],['text','32','32',['Key']]]],
   ['Offset',[['number','23','0',['Hour']]]],
   ['Loud',[['number','99','0',['%']]]],
-  ['Status',[['checkbox',3,,['Notifications','Openweather ok','SNTP ok']]]]
+  ['Status',[['checkbox',1,,['Notifications','Openweather Ok','SNTP Ok',"STA conf. Ok"]]]]
 ];
 
 const modal = window.document.getElementById('modal');

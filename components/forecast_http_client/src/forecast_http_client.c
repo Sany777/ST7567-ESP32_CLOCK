@@ -13,7 +13,7 @@ static char url_buf[SIZE_URL_BUF];
 
 static size_t get_value_ptrs(char ***value_list, char *data_buf, const size_t buf_len, const char *key)
 {
-    char *buf_oper[MAX_KEY_NUM];
+    char *buf_oper[MAX_KEY_NUM] = { 0 };
     if(data_buf == NULL) 
         return 0;
     const size_t key_size = strlen(key);
@@ -110,8 +110,6 @@ static void split(char *data_buf, size_t data_size, const char *split_chars_str)
         ++ptr;
     }
 }
-
-#include "esp_log.h"
 
 int get_weather(const char *city, const char *api_key)
 {

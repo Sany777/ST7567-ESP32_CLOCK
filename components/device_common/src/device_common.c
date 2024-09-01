@@ -37,13 +37,23 @@ static const char *NOTIFY_DATA_NAME = "notify_data";
 static int read_data();
 
 
-static void update_time_handler()
+
+static void update_charge_status_handler()
 {
-    static int sec;
-    service_data.cur_sec = get_time_sec(get_time_tm());
-    if( (service_data.cur_sec - sec) >= 60){
-        sec = service_data.cur_sec;
-        device_set_state(BIT_NEW_MIN);
+    int volt = adc_reader_get_voltage();
+    if(volt > 2){
+        if(volt < 3.4){
+            esp_deep_sleep_start();
+        }
+        if(volt < 3.6){
+            device_set_state(BIT_IS_LOW_BAT);
+            for(int i=10; i<0; --i){
+                start_signale_series(40,3,i*100 + 500);
+                vTaskDelay(200/portTICK_PERIOD_MS);
+            }
+        }else{
+            device_clear_state(BIT_IS_LOW_BAT);
+        }
     }
 }
 
@@ -237,15 +247,25 @@ bool is_signale(struct tm *tm_info)
     return false;
 }
 
-
+static void update_time_handler()
+{
+    static int min;
+    int cur_min = get_time_tm()->tm_min;
+    if(min != cur_min){
+        min = cur_min;
+        device_set_state(BIT_NEW_MIN);
+    } 
+}
 
 void device_init()
 {
     clock_event_group = xEventGroupCreate();
     adc_reader_init();
+    device_gpio_init();
     read_data();
     I2C_init();
     wifi_init();
+    create_periodic_task(update_charge_status_handler, 300, FOREVER);
     create_periodic_task(update_time_handler, 1, FOREVER);
 }
 

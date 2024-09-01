@@ -54,15 +54,15 @@ static void sta_handler(void* arg, esp_event_base_t event_base, int32_t event_id
             wifi_event_sta_disconnected_t *event_sta_disconnected = (wifi_event_sta_disconnected_t *) event_data;
             if(event_sta_disconnected->reason == WIFI_REASON_NO_AP_FOUND
                         || event_sta_disconnected->reason == WIFI_REASON_HANDSHAKE_TIMEOUT){
-                device_set_state(BIT_ERR_SSID_NO_FOUND);
+                device_set_state(BIT_ERR_SSID_NOT_FOUND);
             } else {
-                device_clear_state(BIT_ERR_SSID_NO_FOUND);
+                device_clear_state(BIT_ERR_SSID_NOT_FOUND);
             }
         } 
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         retry_num = 0;
         device_set_state(BIT_IS_STA_CONNECTION);
-        device_clear_state(BIT_ERR_SSID_NO_FOUND);
+        device_clear_state(BIT_ERR_SSID_NOT_FOUND);
     }
 }
 
@@ -102,8 +102,8 @@ int connect_sta(const char *ssid, const char *pwd)
         return ESP_ERR_WIFI_SSID;
     }
     memset(&wifi_sta_config, 0, sizeof(wifi_sta_config));
-    strncpy((char *)wifi_sta_config.sta.ssid, ssid, sizeof(wifi_sta_config.sta.ssid));
-    strncpy((char *)wifi_sta_config.sta.password, pwd, sizeof(wifi_sta_config.sta.password));
+    strncpy((char *)wifi_sta_config.sta.ssid, ssid, sizeof(wifi_sta_config.sta.ssid)-1);
+    strncpy((char *)wifi_sta_config.sta.password, pwd, sizeof(wifi_sta_config.sta.password)-1);
     wifi_sta_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
     wifi_mode = WIFI_MODE_STA;
 

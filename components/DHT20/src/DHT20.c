@@ -47,7 +47,7 @@ int dht20_read_data(float *temperature, float *humidity)
 
     uint8_t txbuf[3] = {0xAC, 0x33, 0x00};             
     uint8_t status_byte[1] = { 0 };                  
-    uint8_t rxdata[6] = {0};                         
+    uint8_t rxdata[7] = {0};                         
     int wait_time = 0;
     I2C_write_bytes(DHT20_I2C_ADDRESS, txbuf, sizeof(txbuf));
     vTaskDelay( 80 / portTICK_PERIOD_MS);                
@@ -65,9 +65,9 @@ int dht20_read_data(float *temperature, float *humidity)
     } while(1);
 
 
-    I2C_read_bytes(DHT20_I2C_ADDRESS, rxdata, 7);              
+    I2C_read_bytes(DHT20_I2C_ADDRESS, rxdata, sizeof(rxdata));              
 
-    uint8_t get_crc = dht20_crc8(rxdata, sizeof(rxdata));                    
+    uint8_t get_crc = dht20_crc8(rxdata, sizeof(rxdata)-1);                    
 
     if (rxdata[6] == get_crc) {                               
         if(humidity){

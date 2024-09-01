@@ -6,6 +6,7 @@
 #include "sound_generator.h"
 #include "dht20.h"
 #include "adc_reader.h"
+#include "toolbox.h"
 
 #include "esp_sleep.h"
 #include "wifi_service.h"
@@ -79,25 +80,9 @@ enum {
 };
 
 volatile static int next_screen;
+volatile static bool screen_inp;
 
-static bool screen_inp;
 
-
-void backlight_off()
-{
-    device_set_pin(PIN_LCD_BACKLIGHT_EN, 0);
-    screen_inp = false;
-    remove_task(backlight_off);
-}
-
-void backlight_on()
-{
-    device_set_pin(PIN_LCD_BACKLIGHT_EN, 1);
-    screen_inp = true;
-    create_periodic_task(backlight_off, 45, 1);
-}
-
-static int screen = NO_DATA;
 
 void set_default_screen_handler()
 {
@@ -112,6 +97,7 @@ static void update_forecast_handler()
 static void main_task(void *pv)
 {
     unsigned bits;
+    int screen = NO_DATA;
     int cmd = NO_DATA;
     uint64_t sleep_time_ms;
     int timeout = TIMEOUT_6_SEC;
@@ -120,8 +106,7 @@ static void main_task(void *pv)
     device_set_pin(PIN_LCD_BACKLIGHT_EN, 0);
     vTaskDelay(200/portTICK_PERIOD_MS);
     lcd_init();
-    init_encoder();
-
+    next_screen = SCREEN_MAIN;
     for(;;){
         vTaskDelay(100/portTICK_PERIOD_MS);
         restart_timer();   
@@ -129,7 +114,7 @@ static void main_task(void *pv)
             bits = device_get_state();
             
             if(bits&BIT_ENCODER_ROTATE){
-                start_single_signale(10, 2000);
+                start_single_signale(15, 1000);
                 if(screen_inp){
                     next_screen += get_encoder_val();
                     reset_encoder_val();
@@ -139,17 +124,28 @@ static void main_task(void *pv)
                     cmd = CMD_DEC;
                 }
                 device_clear_state(BIT_ENCODER_ROTATE);
+            }
+            if(screen != next_screen) {
+                if(next_screen >= SCREEN_LIST_SIZE){
+                    next_screen = 0;
+                } else if(next_screen < 0){
+                    next_screen = SCREEN_LIST_SIZE-1;
+                }
+                if(next_screen == SCREEN_MAIN) {
+                    remove_task(set_default_screen_handler);
+                } else if(next_screen != SCREEN_TIMER){
+                    create_periodic_task(set_default_screen_handler, 30, 1);
+                }
+                screen = next_screen;
+                cmd = CMD_INIT;
             }else if(bits&BIT_BUT_PRESSED){
                 cmd = CMD_PRESS;
                 device_clear_state(BIT_BUT_PRESSED);
             } else if(bits&BIT_BUT_LONG_PRESSED){
-                if(screen_inp){
-                    backlight_off();
-                } else {
-                    backlight_on();
-                }
+                screen_inp = !screen_inp;
+                device_set_pin(PIN_LCD_BACKLIGHT_EN, screen_inp);
                 device_clear_state(BIT_BUT_LONG_PRESSED);
-            } else if(bits & BIT_NEW_DATA) {
+            } else if(bits&BIT_NEW_DATA) {
                 cmd = CMD_UPDATE_DATA;
                 device_clear_state(BIT_NEW_DATA);
             } else if(bits&BIT_NEW_MIN) {
@@ -160,27 +156,13 @@ static void main_task(void *pv)
                         start_signale_series(75, 5, 2000);
                     }
                 }
-            } else if( ! screen_inp
-                        && ! (bits&BIT_WAIT_SIGNALE)
+            } else if( ! (bits&BIT_WAIT_SIGNALE)
                             && ! (bits&BIT_WAIT_BUT_INPUT)
                                 && ! (bits&BIT_WAIT_PROCCESS)
                                     && get_timer_ms() > timeout){
                 break;
             }
-            if(screen != next_screen) {
-                if(next_screen >= SCREEN_LIST_SIZE){
-                    next_screen = 0;
-                } else if(next_screen < 0){
-                    next_screen = SCREEN_LIST_SIZE-1;
-                }
-                if(next_screen == SCREEN_MAIN){
-                    remove_task(set_default_screen_handler);
-                } else {
-                    create_periodic_task(set_default_screen_handler, 55, 1);
-                }
-                screen = next_screen;
-                cmd = CMD_INIT;
-            } 
+            
             
             if(cmd != NO_DATA){
                 lcd_fill(UNCOLORED);
@@ -191,42 +173,26 @@ static void main_task(void *pv)
                 cmd = NO_DATA;
             }
 
-            vTaskDelay(50/portTICK_PERIOD_MS);
+            vTaskDelay(200/portTICK_PERIOD_MS);
 
         } while(1);
-        
-        if(screen != SCREEN_TIMER){
-            next_screen = SCREEN_MAIN;
-        }
+        screen_inp = false;
+        device_set_pin(PIN_LCD_BACKLIGHT_EN, 0);
         wifi_stop();
-        sleep_time_ms = ONE_MINUTE - get_timer_ms()%ONE_MINUTE + 1;
+        sleep_time_ms = ONE_MINUTE - get_timer_ms()%ONE_MINUTE;
         device_set_pin(PIN_DHT20_EN, 0);
         esp_sleep_enable_timer_wakeup(sleep_time_ms * 1000);
         esp_sleep_enable_ext0_wakeup((gpio_num_t)PIN_WAKEUP, 0);
         esp_light_sleep_start();
+        device_set_pin(PIN_DHT20_EN, 1);    
         if(get_but_state()){
-            timeout = TIMEOUT_6_SEC;
+            timeout = TIMEOUT_SEC;
         } else {
             timeout = 1;
         }
-        device_set_pin(PIN_DHT20_EN, 1);    
+        device_set_state(BIT_NEW_DATA);
     }
 }
-
-static int get_actual_forecast_data_index(const int cur_time_sec)
-{
-    const int cur_hour = cur_time_sec/3600;
-    if(service_data.update_data_time == NO_DATA 
-                || cur_hour - service_data.update_data_time > FORECAST_LIST_SIZE*3){
-            return NO_DATA;
-    }
-    return (cur_hour - service_data.update_data_time) / 3;
-
-}
-
-
-
-
 
 static void service_task(void *pv)
 {
@@ -234,11 +200,10 @@ static void service_task(void *pv)
     int timeout = 0;
     bool open_sesion = false;
     vTaskDelay(100/portTICK_PERIOD_MS);
-    int fail_count = 0;
+    int fail_count = 2;
+    int esp_res;
     for(;;){
-        device_wait_bits_untile(BIT_UPDATE_FORECAST_DATA
-                            | BIT_INIT_SNTP
-                            | BIT_START_SERVER, 
+        device_wait_bits_untile(BIT_UPDATE_FORECAST_DATA|BIT_START_SERVER, 
                             portMAX_DELAY);
 
         bits = device_set_state(BIT_WAIT_PROCCESS);
@@ -271,42 +236,35 @@ static void service_task(void *pv)
             bits = device_set_state(BIT_NEW_DATA);
         }
 
-        if(bits&BIT_UPDATE_FORECAST_DATA || bits&BIT_INIT_SNTP){
-            if(connect_sta(device_get_ssid(),device_get_pwd()) == ESP_OK){
-                if(! (bits&BIT_IS_TIME) || bits&BIT_INIT_SNTP ){
+        if(bits&BIT_UPDATE_FORECAST_DATA){
+            esp_res = connect_sta(device_get_ssid(),device_get_pwd());
+            if(esp_res == ESP_OK){
+                if(! (bits&BIT_STA_CONF_OK)){
+                    device_set_state(BIT_STA_CONF_OK);
+                }
+                if(! (bits&BIT_IS_TIME) ){
                     init_sntp();
                     device_wait_bits(BIT_IS_TIME);
-                    bits = device_clear_state(BIT_INIT_SNTP);
                 }
-                if(bits&BIT_UPDATE_FORECAST_DATA){
-                    if(get_weather(device_get_city_name(),device_get_api_key()) == ESP_OK){
-                        if(! (bits&BIT_FORECAST_OK) ){
-                            create_periodic_task(update_forecast_handler, 60*30, FOREVER);
-                        }
-                        device_set_state(BIT_FORECAST_OK|BIT_NEW_DATA);
-                    } else {
-                        if(bits&BIT_FORECAST_OK){
-                            fail_count = 5;
-                        }
-                        create_periodic_task(update_forecast_handler, fail_count*60, FOREVER);
-                        if(fail_count < 30){
-                            fail_count += 5;
-                        }
-                        device_clear_state(BIT_FORECAST_OK);
-                    }
+                esp_res = get_weather(device_get_city_name(),device_get_api_key());
+            }
+            
+            if(esp_res == ESP_OK){
+                if(! (bits&BIT_FORECAST_OK)){
+                    create_periodic_task(update_forecast_handler, 60*30, FOREVER);
                 }
-            } else {
-                if(bits&BIT_FORECAST_OK){
-                    fail_count = 1;
-                }
-                if(fail_count < 25){
-                    create_periodic_task(update_forecast_handler, fail_count*60, 1);
-                    fail_count += fail_count/2 + 1;
-                }
+                device_set_state(BIT_FORECAST_OK|BIT_NEW_DATA);
+            } else if(bits&BIT_FORECAST_OK){
+                fail_count = 10;
+                create_periodic_task(update_forecast_handler, fail_count*60, 1);
                 device_clear_state(BIT_FORECAST_OK);
+            } else if(fail_count < 30){
+                create_periodic_task(update_forecast_handler, fail_count*60, FOREVER);
+                fail_count += 5;
             }
             device_clear_state(BIT_UPDATE_FORECAST_DATA);
         }
+
         device_clear_state(BIT_WAIT_PROCCESS);
     }
 }
@@ -327,7 +285,7 @@ int tasks_init()
             "main",
             20000, 
             NULL, 
-            3,
+            4,
             NULL) != pdTRUE 
     ){
         ESP_LOGE("","task create failure");
@@ -387,9 +345,7 @@ static void timer_func(int cmd)
             return;
         }
     } else if(cmd == CMD_PRESS){
-        if(screen_inp){
-            backlight_off();
-        } else if(init_val > 0){
+        if(init_val > 0){
             timer_run = !timer_run;
             if(timer_run){
                 restart_timer();
@@ -416,6 +372,7 @@ static void timer_func(int cmd)
             int timeout = 50;
             int light_en = 0;
             do{
+                vTaskDelay(100/portTICK_PERIOD_MS);
                 if(timeout%5){
                     light_en = !light_en;
                     device_set_pin(PIN_LCD_BACKLIGHT_EN, light_en);
@@ -423,22 +380,19 @@ static void timer_func(int cmd)
                 if(get_but_state()){
                     sound_off();
                     device_set_pin(PIN_LCD_BACKLIGHT_EN, 0);
-                    while(get_but_state()){
+                    do{
                         vTaskDelay(100/portTICK_PERIOD_MS);
-                    }
+                    }while(get_but_state());
                     device_clear_state(BIT_BUT_PRESSED|BIT_BUT_LONG_PRESSED);
                     next_screen = SCREEN_MAIN;
                     return;
-                } 
-
+                }
                 timeout -= 1;
-                vTaskDelay(100/portTICK_PERIOD_MS);
- 
             }while(timeout);
             device_set_pin(PIN_LCD_BACKLIGHT_EN, 0);
             timer_run = true;
-            create_periodic_task(timer_counter_handler, 60, FOREVER);
             timer_counter = init_val;
+            create_periodic_task(timer_counter_handler, 60, FOREVER);
         }
     }
 
@@ -469,12 +423,12 @@ static void setting_func(int cmd)
         if(cmd == CMD_PRESS){
             device_clear_state(BIT_SERVER_RUN|BIT_START_SERVER);
         }
-        lcd_print_centered_str(0, FONT_SIZE_9, COLORED, "Server run!");
-        lcd_print_centered_str(10, FONT_SIZE_9, COLORED, "http://");
-        lcd_print_centered_str(20, FONT_SIZE_9, COLORED,"192.168.4.1");
-        lcd_print_centered_str(30, FONT_SIZE_9, COLORED, "SSID:" CONFIG_WIFI_AP_SSID);
-        lcd_print_centered_str(40, FONT_SIZE_9, COLORED, "Password:");
-        lcd_print_centered_str(50, FONT_SIZE_9, COLORED, CONFIG_WIFI_AP_PASSWORD);
+        lcd_print_centered_str(2, FONT_SIZE_9, COLORED, "Server run!");
+        lcd_print_centered_str(12, FONT_SIZE_9, COLORED, "http://");
+        lcd_print_centered_str(22, FONT_SIZE_9, COLORED,"192.168.4.1");
+        lcd_print_centered_str(32, FONT_SIZE_9, COLORED, "SSID:" CONFIG_WIFI_AP_SSID);
+        lcd_print_centered_str(42, FONT_SIZE_9, COLORED, "Password:");
+        lcd_print_centered_str(52, FONT_SIZE_9, COLORED, CONFIG_WIFI_AP_PASSWORD);
     } else {
         if(cmd == CMD_PRESS){
             device_set_state(BIT_START_SERVER|BIT_WAIT_PROCCESS);
@@ -495,20 +449,28 @@ static void main_func(int cmd)
         return;
     }
 
+    const unsigned bits = device_get_state();
+    int ver_desc;
 
-    if(cmd == CMD_UPDATE_TIME && adc_reader_get_voltage() < 3.5f){
+    if(bits&BIT_IS_LOW_BAT){
         lcd_printf(1, 1, FONT_SIZE_9, COLORED, "BAT!");
+        lcd_draw_rectangle(0, 0, 32, 10, COLORED);
+        lcd_draw_rectangle(32, 3, 4, 4, COLORED);
+        ver_desc = 11;
+    } else {
+        ver_desc = 8;
     }
     
     print_temp_indoor();
 
-    unsigned bits = device_get_state();
-    int data_indx = get_actual_forecast_data_index(service_data.cur_sec);
+    int data_indx = get_actual_forecast_data_index(get_time_tm(), service_data.update_data_time);
+
     if(data_indx != NO_DATA){
         lcd_printf(70, 49, FONT_SIZE_9, COLORED, "%dC*", service_data.temp_list[data_indx]);
-        lcd_print_centered_str(9, FONT_SIZE_9, COLORED, service_data.desciption[data_indx]);
+        lcd_print_centered_str(ver_desc, FONT_SIZE_9, COLORED, service_data.desciption[data_indx]);
     }
-    if(bits & BIT_IS_TIME) {
+    
+    if(bits&BIT_IS_TIME) {
         lcd_print_centered_str(20, FONT_SIZE_18, COLORED, snprintf_time("%H:%M"));
         lcd_print_centered_str(37, FONT_SIZE_9, COLORED, snprintf_time("%d %a"));
     } else {
@@ -534,42 +496,54 @@ static void device_info_func(int cmd)
     lcd_draw_line(1, 18, 127, COLORED, HORISONTAL, 1);
 
     if(bits&BIT_IS_STA_CONNECTION){
-        lcd_print_str(5, 20, FONT_SIZE_9, UNCOLORED, "STA:enable");
+        lcd_print_str(2, 20, FONT_SIZE_9, COLORED, "WiFi:connected");
+    } else if(bits&BIT_ERR_SSID_NOT_FOUND){
+        lcd_print_str(2, 20, FONT_SIZE_9, UNCOLORED, "SSID:not found");
+    } else if( ! (bits&BIT_STA_CONF_OK)){
+        lcd_print_str(2, 20, FONT_SIZE_9, UNCOLORED, "WiFi pwd is wrong");
     } else {
-        lcd_print_str(5, 20, FONT_SIZE_9, COLORED, "STA:disable");
+        lcd_print_str(2, 20, FONT_SIZE_9, COLORED, "WiFi:disable");
     }
-    if(bits&BIT_IS_AP_CONNECTION){
-        lcd_print_str(5, 30, FONT_SIZE_9, UNCOLORED, "AP:enable");
+    if(bits&BIT_IS_AP_CLIENT){
+        lcd_print_str(2, 30, FONT_SIZE_9, COLORED, "AP:is a client");
+    }else if(bits&BIT_IS_AP_CONNECTION){
+        lcd_print_str(2, 30, FONT_SIZE_9, COLORED, "AP:enable");
     } else {
-        lcd_print_str(5, 30, FONT_SIZE_9, COLORED, "AP:disable");
+        lcd_print_str(2, 30, FONT_SIZE_9, COLORED, "AP:disable");
     }
     if(bits&BIT_SNTP_OK){
-        lcd_print_str(5, 40, FONT_SIZE_9, UNCOLORED, "SNTP:oK");
+        lcd_print_str(2, 40, FONT_SIZE_9, COLORED, "SNTP:Ok");
     } else {
-        lcd_print_str(5, 40, FONT_SIZE_9, COLORED, "SNTP:NOK");
+        lcd_print_str(2, 40, FONT_SIZE_9, UNCOLORED, "SNTP:NOk");
     }
     if(bits&BIT_FORECAST_OK){
-        lcd_print_str(5, 50, FONT_SIZE_9, UNCOLORED, "Openweath.:Ok");
+        lcd_print_str(2, 50, FONT_SIZE_9, COLORED, "Openweath.:Ok");
     } else {
-        lcd_print_str(5, 50, FONT_SIZE_9, COLORED, "Openweath.:Nok");
+        lcd_print_str(2, 50, FONT_SIZE_9, UNCOLORED, "Openweath.:Nok");
     }
 }
 
 
 static void weather_info_func(int cmd)
 {
-    int dt = service_data.update_data_time;
-
+    lcd_draw_line(0, 10, 128, COLORED, HORISONTAL, 1);
+    lcd_draw_line(1, 11, 127, COLORED, HORISONTAL, 1);
+    if(cmd == CMD_PRESS){
+        device_set_state(BIT_UPDATE_FORECAST_DATA);
+    }
     if(cmd == CMD_INC || cmd == CMD_DEC){
         next_screen += get_encoder_val();
         reset_encoder_val();
         return;
     }
-
-    if(cmd == CMD_PRESS){
-        device_set_state(BIT_UPDATE_FORECAST_DATA);
+    if(service_data.update_data_time == NO_DATA){
+        lcd_printf_centered(1, FONT_SIZE_9, COLORED, "No data");
+        return;
     }
-    int data_indx = get_actual_forecast_data_index(service_data.cur_sec);
+
+    int dt = service_data.update_data_time;
+    int data_indx = get_actual_forecast_data_index(get_time_tm(), dt);
+
     if(data_indx != NO_DATA){
         lcd_print_centered_str(1, FONT_SIZE_9, COLORED, service_data.desciption[data_indx]);
     } else {
@@ -594,8 +568,6 @@ static void weather_info_func(int cmd)
                     "%d%%", service_data.pop_list[i]);
         dt += 3;
     }
-    lcd_draw_line(0, 10, 128, COLORED, HORISONTAL, 1);
-    lcd_draw_line(1, 11, 127, COLORED, HORISONTAL, 1);
     lcd_draw_line(42, 12, 64, COLORED, VERTICAL, 1);
     lcd_draw_line(90, 12, 64, COLORED, VERTICAL, 1);
 }

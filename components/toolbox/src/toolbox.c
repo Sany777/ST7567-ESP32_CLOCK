@@ -1,9 +1,25 @@
 #include "toolbox.h"
 
+#include "device_common.h"
 
 #include "stdlib.h"
 
+int get_actual_forecast_data_index(struct tm *tm_info, int update_data_time)
+{
+    unsigned time_dif;
+    if(update_data_time < 0 
+        || tm_info->tm_hour < 0
+        || update_data_time > 23 
+        || tm_info->tm_hour > 23) return NO_DATA;
 
+    if(tm_info->tm_hour >= update_data_time){
+        time_dif = tm_info->tm_hour - update_data_time;
+    } else {
+        time_dif = 24 + tm_info->tm_hour - update_data_time;
+    }
+    if(time_dif >= FORECAST_LIST_SIZE*3) return NO_DATA;
+    return time_dif / 3;
+}
 
 
 unsigned get_num(char *data, const unsigned size)

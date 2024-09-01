@@ -26,7 +26,7 @@ enum Bits{
     BIT_NOTIF_ENABLE            = (1<<0),
     BIT_FORECAST_OK             = (1<<1),
     BIT_SNTP_OK                 = (1<<2),
-    BIT_ERR_SSID_NO_FOUND       = (1<<3),
+    BIT_STA_CONF_OK             = (1<<3),
     BIT_ENCODER_ROTATE          = (1<<4),
     BIT_IS_AP_CONNECTION        = (1<<5),
     BIT_IS_STA_CONNECTION       = (1<<6),
@@ -36,14 +36,14 @@ enum Bits{
     BIT_WAIT_PROCCESS           = (1<<10),
     BIT_START_SERVER            = (1<<11),
     BIT_UPDATE_FORECAST_DATA    = (1<<12),
-    BIT_INIT_SNTP               = (1<<13),
+    BIT_IS_LOW_BAT              = (1<<13),
     BIT_BUT_PRESSED             = (1<<14),
     BIT_WAIT_BUT_INPUT          = (1<<15),
     BIT_NEW_DATA                = (1<<16),
     BIT_NEW_MIN                 = (1<<17),
     BIT_WAIT_SIGNALE            = (1<<18),
     BIT_BUT_LONG_PRESSED        = (1<<19),
-    // BIT_WAIT_BACKLIGHT          = (1<<20),
+    BIT_ERR_SSID_NOT_FOUND      = (1<<20),
     STORED_FLAGS                = (BIT_NOTIF_ENABLE),
 };
 
@@ -61,7 +61,6 @@ typedef struct {
 
 
 typedef struct {
-    int cur_sec;
     int update_data_time;
     int pop_list[FORECAST_LIST_SIZE];
     int temp_list[FORECAST_LIST_SIZE];
@@ -69,22 +68,22 @@ typedef struct {
 } service_data_t;
 
 // --------------------------------------- GPIO
-void init_encoder(void);
+void device_gpio_init(void);
 int device_set_pin(int pin, unsigned state);
 int get_encoder_val();
 int get_encoder_val();
 void reset_encoder_val();
 int get_but_state();
 
-#define PIN_LCD_BACKLIGHT_EN         GPIO_NUM_26
-#define PIN_ENCODER_PIN_A  GPIO_NUM_12
-#define PIN_ENCODER_PIN_B  GPIO_NUM_14
-#define PIN_ENCODER_BUT    GPIO_NUM_33
-#define PIN_WAKEUP         PIN_ENCODER_BUT
-#define PIN_DHT20_EN       GPIO_NUM_27
-#define PIN_SIG_OUT        GPIO_NUM_25 
-#define I2C_MASTER_SCL_IO  GPIO_NUM_19       
-#define I2C_MASTER_SDA_IO  GPIO_NUM_22        
+#define PIN_LCD_BACKLIGHT_EN    GPIO_NUM_26
+#define PIN_ENCODER_PIN_A       GPIO_NUM_12
+#define PIN_ENCODER_PIN_B       GPIO_NUM_14
+#define PIN_ENCODER_BUT         GPIO_NUM_33
+#define PIN_DHT20_EN            GPIO_NUM_27
+#define PIN_WAKEUP              PIN_ENCODER_BUT
+#define PIN_SIG_OUT             GPIO_NUM_25 
+#define I2C_MASTER_SCL_IO       GPIO_NUM_19       
+#define I2C_MASTER_SDA_IO       GPIO_NUM_22        
 
 
 // --------------------------------------- common

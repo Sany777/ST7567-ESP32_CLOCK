@@ -9,9 +9,9 @@
 #include "clock_module.h"
 #include "device_macro.h"
 
-#define MAX_TASKS_NUM 10
+#define MAX_TASKS_NUM 15
 
-static uint64_t ms;
+volatile static uint64_t ms;
 
 typedef struct {
     periodic_func_t func;
@@ -37,9 +37,8 @@ static int periodic_task_create(periodic_task_list_data_t *list,
                                             periodic_func_t func,
                                             unsigned delay_ms, 
                                             unsigned count);
-static void tasks_run(periodic_task_list_data_t *list, size_t list_size, int decrement_val);
+static void tasks_run(periodic_task_list_data_t *list, size_t list_size, unsigned decrement_val);
 static  void periodic_timer_cb(void*);
-static int init_timer(void);
 
 static periodic_task_list_data_t* IRAM_ATTR find_task(periodic_task_list_data_t *list, 
                                                         size_t list_size, 
@@ -83,18 +82,19 @@ static int IRAM_ATTR periodic_task_create(
     periodic_task_list_data_t 
         *end = list+MAX_TASKS_NUM;
     periodic_task_list_data_t *to_insert = find_task(list, MAX_TASKS_NUM, func);
-    while(to_insert == NULL && list < end){
-        if(list->delay == 0){
-            to_insert = list;
-            to_insert->func = func;
-        } else {
+    if(to_insert == NULL){
+        while(list < end){
+            if(list->count == 0){
+                to_insert = list;
+                to_insert->func = func;
+                break;
+            }
             ++list;
         }
     }
 
     if(to_insert){
-        to_insert->delay = delay;
-        to_insert->delay_init = delay;
+        to_insert->delay_init = to_insert->delay = delay;
         to_insert->count = count;
         res = ESP_OK;
     }
@@ -144,12 +144,11 @@ int IRAM_ATTR create_periodic_task(periodic_func_t func,
                                     func, 
                                     delay_sec, 
                                     count);
-    if(task_runner_handle == NULL){
-        xTaskCreate(runner_task, "task_runner", 10000, NULL, 4, &task_runner_handle);
-        if(!task_runner_handle)
-            return ESP_FAIL;
-    } else {
+    if(task_runner_handle){
         vTaskResume(task_runner_handle);
+    } else {
+        xTaskCreate(runner_task, "task_runner", 10000, NULL, 5, &task_runner_handle);
+        if(task_runner_handle == NULL) return ESP_FAIL;
     }
     return res;
 }
@@ -164,7 +163,7 @@ long long IRAM_ATTR get_timer_ms()
     return ms;
 }
 
-static void tasks_run(periodic_task_list_data_t *list, size_t list_size, int decrement_val)
+static void tasks_run(periodic_task_list_data_t *list, size_t list_size, unsigned decrement_val)
 {
     const periodic_task_list_data_t *end = list+list_size;
     while(list < end){
@@ -172,9 +171,7 @@ static void tasks_run(periodic_task_list_data_t *list, size_t list_size, int dec
             list->delay -= MIN(decrement_val, list->delay);
             if(list->delay == 0){
                 if(list->count > 0)list->count -= 1;
-                if(list->count != 0){
-                    list->delay = list->delay_init;
-                }
+                if(list->count != 0)list->delay = list->delay_init;
                 list->func();
             }
         }
@@ -206,12 +203,19 @@ void task_runner_deinit()
 
 static void runner_task(void *pvParameters)
 {
-    int cur_time = get_time_sec(get_time_tm());
-    int time_val = cur_time;
+    unsigned time_dif;
+    struct tm *tinfo = get_time_tm();
+    int cur_time = get_time_sec(tinfo);
+    int last_time_val = cur_time;
     for(;;){
         vTaskDelay(1000/portTICK_PERIOD_MS);
-        cur_time = get_time_sec(get_time_tm());
-        tasks_run(periodic_task_list, MAX_TASKS_NUM, cur_time-time_val);
-        time_val = cur_time;
+        cur_time = get_time_sec(tinfo);
+        if(cur_time > last_time_val){
+            time_dif = cur_time - last_time_val;
+        } else {
+            time_dif = cur_time + 86400 - last_time_val;
+        }
+        tasks_run(periodic_task_list, MAX_TASKS_NUM, time_dif);
+        last_time_val = cur_time;
     }
 }

@@ -11,7 +11,7 @@
 #include "driver/gpio.h"
 
 
-static void end_wait_but_inp();
+static void end_wait_but_inp_handler();
 
 volatile int encoder_value = 0;
 
@@ -47,7 +47,7 @@ static void IRAM_ATTR encoder_isr_handler(void* arg)
                 encoder_value--;
             }
             device_set_state_isr(BIT_ENCODER_ROTATE|BIT_WAIT_BUT_INPUT);
-            create_periodic_isr_task(end_wait_but_inp, 5000, 1);
+            create_periodic_isr_task(end_wait_but_inp_handler, 4000, 1);
             counter = 0;
         }
     }
@@ -55,43 +55,48 @@ static void IRAM_ATTR encoder_isr_handler(void* arg)
     last_b = b;
 }
 
-static int but_count;
 
 
 
-static void end_wait_but_inp()
+static void end_wait_but_inp_handler()
 {
     device_clear_state_isr(BIT_WAIT_BUT_INPUT);
 }
 
 
+volatile static int but_count;
 
-static void end_but_input()
+static void end_but_input_handler()
 {
-    if(gpio_get_level(PIN_ENCODER_BUT) || but_count > 2){
-        if(but_count > 2){
-            start_signale_series(40, 3, 2000);
-            device_set_state_isr(BIT_BUT_LONG_PRESSED);
+    if( ! gpio_get_level(PIN_ENCODER_BUT)){
+        if(but_count < 5){
+            but_count += 1;
         } else {
-            start_single_signale(50, 2000);
-            device_set_state_isr(BIT_BUT_PRESSED);
+            device_set_state_isr(BIT_BUT_LONG_PRESSED);
+            remove_isr_task(end_but_input_handler);
+            create_periodic_isr_task(end_wait_but_inp_handler, 5000, 1);
+            but_count = 0;
         }
-        remove_isr_task(end_but_input);
-        create_periodic_isr_task(end_wait_but_inp, 5000, 1);
+    } else if(but_count){
+        but_count -= 1;
     } else {
-        but_count += 1;
+        device_set_state_isr(BIT_BUT_PRESSED);
+        remove_isr_task(end_but_input_handler);
+        create_periodic_isr_task(end_wait_but_inp_handler, 5000, 1);
     }
 }
 
 
 static void IRAM_ATTR button_isr_handler(void* arg) 
 {
-    but_count = 0;
-    device_set_state_isr(BIT_WAIT_BUT_INPUT);
-    create_periodic_isr_task(end_but_input, 250, FOREVER);
+    if(but_count == 0){
+        device_set_state_isr(BIT_WAIT_BUT_INPUT);
+        create_periodic_isr_task(end_but_input_handler, 200, FOREVER);
+    }
 }
 
-void init_encoder(void) {
+void device_gpio_init() 
+{
     gpio_config_t io_conf = {
         .pin_bit_mask = (1ULL << PIN_ENCODER_PIN_A) | (1ULL << PIN_ENCODER_PIN_B),
         .mode = GPIO_MODE_INPUT,
@@ -103,7 +108,7 @@ void init_encoder(void) {
     gpio_config_t but_conf = {
         .pin_bit_mask = (1ULL << PIN_ENCODER_BUT),
         .mode = GPIO_MODE_INPUT,
-        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_up_en = GPIO_PULLUP_ENABLE,
         .intr_type = GPIO_INTR_NEGEDGE
     };
     gpio_config(&but_conf);

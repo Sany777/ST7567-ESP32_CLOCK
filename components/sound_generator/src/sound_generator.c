@@ -19,7 +19,7 @@
 #define DEFAULT_DELAY           100
 
 
-static unsigned _delay, _loud;
+volatile static unsigned _delay, _loud;
 
 static ledc_timer_config_t ledc_timer = {
     .speed_mode       = LEDC_MODE,
@@ -68,27 +68,31 @@ void alarm()
 
 void start_alarm()
 {
-    create_periodic_isr_task(alarm, 1000, 5);
+    if(!(device_get_state()&BIT_WAIT_SIGNALE) ){
+        create_periodic_isr_task(alarm, 1000, 5);
+    }
 }
 
 void sound_off()
 {
+    remove_isr_task(alarm);
     remove_isr_task(continue_signale);
     remove_isr_task(stop_signale);
-    remove_isr_task(alarm);
     stop_signale();
 }
 
 void start_signale_series(unsigned delay, unsigned count, unsigned freq)
 {
-    init_pwm(freq);
-    start_pwm(_loud);
-    if(delay == 0)_delay = DEFAULT_DELAY;
-    else _delay = delay;
-    if(count>1){
-        create_periodic_isr_task(continue_signale, _delay, count-1);
+    if(!(device_get_state()&BIT_WAIT_SIGNALE) ){
+        init_pwm(freq);
+        start_pwm(_loud);
+        if(delay == 0)_delay = DEFAULT_DELAY;
+        else _delay = delay;
+        if(count>1){
+            create_periodic_isr_task(continue_signale, _delay, count-1);
+        }
+        create_periodic_isr_task(stop_signale, _delay/2, 1);
     }
-    create_periodic_isr_task(stop_signale, _delay/2, 1);
 }
 
 static IRAM_ATTR void stop_signale()

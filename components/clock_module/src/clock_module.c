@@ -47,9 +47,9 @@ void set_offset(int offset_hour)
 
 static void set_time_cb(struct timeval *tv)
 {
-    tv->tv_sec += 60 * 60 * device_get_offset();
+    tv->tv_sec += 3600 * device_get_offset();
     settimeofday(tv, NULL);
-    device_set_state(BIT_NEW_DATA|BIT_IS_TIME);
+    device_set_state(BIT_NEW_MIN|BIT_IS_TIME|BIT_SNTP_OK);
 }
 
 
