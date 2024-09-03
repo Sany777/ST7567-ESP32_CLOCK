@@ -36,24 +36,46 @@ static const char *NOTIFY_DATA_NAME = "notify_data";
 
 static int read_data();
 
+float volt;
 
+
+float device_get_volt()
+{
+    static int count = 0;
+    if(count % 5 == 0 || volt < 3.0){
+        measure_volt();
+        create_periodic_task(measure_volt, 1000, 5);
+    }
+    count += 1;
+    return volt;
+}
+
+void measure_volt()
+{
+    float volt_val = adc_reader_get_voltage();
+    unsigned bits = device_get_state();
+    if(volt_val > 2.0){
+        if(volt_val < 3.3){
+            esp_deep_sleep(0xffffffff);
+        }
+        if(volt_val < 3.5){
+            if(! (bits&BIT_IS_LOW_BAT) ){
+                device_set_state(BIT_IS_LOW_BAT|BIT_NEW_DATA);
+            }
+        } else {
+            if( bits&BIT_IS_LOW_BAT){
+                device_clear_state(BIT_IS_LOW_BAT);
+                device_set_state(BIT_NEW_DATA);
+            }
+        }
+        volt = volt_val;
+    }
+}
 
 static void update_charge_status_handler()
 {
-    int volt = adc_reader_get_voltage();
-    if(volt > 2){
-        if(volt < 3.4){
-            esp_deep_sleep_start();
-        }
-        if(volt < 3.6){
-            device_set_state(BIT_IS_LOW_BAT);
-            for(int i=10; i<0; --i){
-                start_signale_series(40,3,i*100 + 500);
-                vTaskDelay(200/portTICK_PERIOD_MS);
-            }
-        }else{
-            device_clear_state(BIT_IS_LOW_BAT);
-        }
+    if(volt < 3.4 && device_get_volt() < 3.4){
+        start_signale_series(20,5,1500);
     }
 }
 
@@ -265,7 +287,7 @@ void device_init()
     read_data();
     I2C_init();
     wifi_init();
-    create_periodic_task(update_charge_status_handler, 300, FOREVER);
+    create_periodic_task(update_charge_status_handler, 600, FOREVER);
     create_periodic_task(update_time_handler, 1, FOREVER);
 }
 

@@ -2,6 +2,7 @@
 
 #include "device_common.h"
 
+
 #include "stdlib.h"
 
 int get_actual_forecast_data_index(struct tm *tm_info, int update_data_time)

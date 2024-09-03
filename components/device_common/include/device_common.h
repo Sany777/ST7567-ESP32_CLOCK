@@ -113,8 +113,13 @@ unsigned device_set_state(unsigned bits);
 unsigned get_notif_num(unsigned *schema);
 void device_init();
 
+float device_get_volt();
+void measure_volt();
+
+
+
 #define device_wait_bits(bits) \
-    device_wait_bits_untile(bits, 10000/portTICK_PERIOD_MS)
+    device_wait_bits_untile(bits, 12000/portTICK_PERIOD_MS)
     
 #define get_notif_size(schema) \
     (get_notif_num(schema)*sizeof(unsigned))

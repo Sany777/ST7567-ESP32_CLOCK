@@ -32,6 +32,6 @@ float adc_reader_get_voltage(void)
 {
     int adc_value = 0;
     adc2_get_raw(ADC_CHANNEL,ADC_WIDTH_BIT_12, &adc_value);
-    float voltage = (((float)adc_value * 10000) / (ADC_MAX_VALUE*1280)) * (VREF / 1000.0);
+    float voltage = (((float)adc_value * 10000) / (ADC_MAX_VALUE*1323)) * (VREF / 1000.0);
     return voltage;
 }

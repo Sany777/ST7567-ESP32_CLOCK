@@ -9,7 +9,7 @@
 
 #include "toolbox.h"
 
-#define INTERVAL_10_HOUR   (1000*60*60*10)
+#define INTERVAL_20_HOUR   (1000*60*60*20)
 
 
 
@@ -64,7 +64,7 @@ void init_sntp()
         esp_sntp_setservername(0, "pool.ntp.org");
         esp_sntp_setservername(1, "time.windows.com");
         sntp_servermode_dhcp(0);
-        esp_sntp_set_sync_interval(INTERVAL_10_HOUR);
+        esp_sntp_set_sync_interval(6000);
         esp_sntp_init();
     }
 }

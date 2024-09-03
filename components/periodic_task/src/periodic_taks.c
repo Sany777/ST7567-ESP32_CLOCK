@@ -17,7 +17,7 @@ typedef struct {
     periodic_func_t func;
     int delay_init;
     int count;
-    int delay;
+    uint64_t delay;
 }periodic_task_list_data_t;
 
 esp_timer_handle_t periodic_timer = NULL;
@@ -35,9 +35,9 @@ static periodic_task_list_data_t* find_task(periodic_task_list_data_t *list,
 static int periodic_task_create(periodic_task_list_data_t *list, 
                                             size_t list_size, 
                                             periodic_func_t func,
-                                            unsigned delay_ms, 
+                                            uint64_t delay_ms, 
                                             unsigned count);
-static void tasks_run(periodic_task_list_data_t *list, size_t list_size, unsigned decrement_val);
+static void tasks_run(periodic_task_list_data_t *list, size_t list_size, uint64_t decrement_val);
 static  void periodic_timer_cb(void*);
 
 static periodic_task_list_data_t* IRAM_ATTR find_task(periodic_task_list_data_t *list, 
@@ -75,7 +75,7 @@ static int IRAM_ATTR periodic_task_create(
                             periodic_task_list_data_t *list, 
                             size_t list_size, 
                             periodic_func_t func,
-                            unsigned delay, 
+                            uint64_t delay, 
                             unsigned count)
 {
     int res = ESP_FAIL;
@@ -102,7 +102,7 @@ static int IRAM_ATTR periodic_task_create(
 }
 
 int IRAM_ATTR create_periodic_isr_task(periodic_func_t func,
-                            unsigned delay_ms, 
+                            uint64_t delay_ms, 
                             unsigned count)
 {
     if(periodic_timer && esp_timer_is_active(periodic_timer)){
@@ -133,7 +133,7 @@ int IRAM_ATTR create_periodic_isr_task(periodic_func_t func,
 
 
 int IRAM_ATTR create_periodic_task(periodic_func_t func,
-                            unsigned delay_sec, 
+                            uint64_t delay_sec, 
                             unsigned count)
 {
     if(task_runner_handle){
@@ -147,7 +147,7 @@ int IRAM_ATTR create_periodic_task(periodic_func_t func,
     if(task_runner_handle){
         vTaskResume(task_runner_handle);
     } else {
-        xTaskCreate(runner_task, "task_runner", 10000, NULL, 5, &task_runner_handle);
+        xTaskCreate(runner_task, "task_runner", 5000, NULL, 5, &task_runner_handle);
         if(task_runner_handle == NULL) return ESP_FAIL;
     }
     return res;
@@ -163,11 +163,11 @@ long long IRAM_ATTR get_timer_ms()
     return ms;
 }
 
-static void tasks_run(periodic_task_list_data_t *list, size_t list_size, unsigned decrement_val)
+static void tasks_run(periodic_task_list_data_t *list, size_t list_size, uint64_t decrement_val)
 {
     const periodic_task_list_data_t *end = list+list_size;
     while(list < end){
-        if(list->delay > 0 && list->count != 0){
+        if(list->delay > 0){
             list->delay -= MIN(decrement_val, list->delay);
             if(list->delay == 0){
                 if(list->count > 0)list->count -= 1;
@@ -207,13 +207,19 @@ static void runner_task(void *pvParameters)
     struct tm *tinfo = get_time_tm();
     int cur_time = get_time_sec(tinfo);
     int last_time_val = cur_time;
+    bool init = false;
     for(;;){
         vTaskDelay(1000/portTICK_PERIOD_MS);
-        cur_time = get_time_sec(tinfo);
-        if(cur_time > last_time_val){
-            time_dif = cur_time - last_time_val;
+        if(! init && tinfo->tm_year != 70){
+            time_dif = 1;
+            init = true;
         } else {
-            time_dif = cur_time + 86400 - last_time_val;
+            cur_time = get_time_sec(tinfo);
+            if(cur_time > last_time_val){
+                time_dif = cur_time - last_time_val;
+            } else {
+                time_dif = cur_time + 86400 - last_time_val;
+            }
         }
         tasks_run(periodic_task_list, MAX_TASKS_NUM, time_dif);
         last_time_val = cur_time;
