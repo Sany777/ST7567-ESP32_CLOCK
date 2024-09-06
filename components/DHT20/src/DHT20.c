@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include "i2c_adapter.h"
+#include "device_macro.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -17,7 +18,7 @@ static uint8_t dht20_crc8(uint8_t *message, uint8_t Num);
 #define DHT20_CMD_READ              0xE1
 
 #define DHT20_STATUS_BUSY           0x80
-#define DHT20_MAX_BUSY_WAIT_MS      1000
+#define DHT20_MAX_BUSY_WAIT_MS      700
 #define DHT20_CHECK_BUSY_DELAY_MS   40
 
 
@@ -41,35 +42,36 @@ bool dht20_is_calibrated(void)
     return false;
 }
 
+int dht20_wait()
+{
+    int wait_time = 0;
+    uint8_t status_byte[1] = { 0 };                  
+    do {
+        vTaskDelay(pdMS_TO_TICKS(DHT20_CHECK_BUSY_DELAY_MS));
+        I2C_read_bytes(DHT20_ADDR, status_byte, sizeof(status_byte));
+        if((status_byte[0] >> 7) == 0){
+            return ESP_OK;
+        }
+        wait_time += DHT20_CHECK_BUSY_DELAY_MS;
+    } while(wait_time < DHT20_MAX_BUSY_WAIT_MS);
+    return ESP_FAIL;
+}
+
 
 int dht20_read_data(float *temperature, float *humidity)
 {
-
     uint8_t txbuf[3] = {0xAC, 0x33, 0x00};             
-    uint8_t status_byte[1] = { 0 };                  
     uint8_t rxdata[7] = {0};                         
-    int wait_time = 0;
     I2C_write_bytes(DHT20_I2C_ADDRESS, txbuf, sizeof(txbuf));
     vTaskDelay( 80 / portTICK_PERIOD_MS);                
-    do {
-        I2C_read_bytes(DHT20_ADDR, status_byte, sizeof(status_byte));
-        if((status_byte[0] >> 7) == 0){
-            break;
-        }
-        wait_time += DHT20_CHECK_BUSY_DELAY_MS;
-        if (wait_time >= DHT20_MAX_BUSY_WAIT_MS) {
-            ESP_LOGE(__func__, "Sensor is busy for too long");
-            return ESP_FAIL;
-        }
-        vTaskDelay(pdMS_TO_TICKS(DHT20_CHECK_BUSY_DELAY_MS));
-    } while(1);
 
+    CHECK_AND_RET_ERR(dht20_wait());
 
     I2C_read_bytes(DHT20_I2C_ADDRESS, rxdata, sizeof(rxdata));              
 
-    uint8_t get_crc = dht20_crc8(rxdata, sizeof(rxdata)-1);                    
+    // uint8_t get_crc = dht20_crc8(rxdata, sizeof(rxdata)-1);                    
 
-    if (rxdata[6] == get_crc) {                               
+    // if (rxdata[6] == get_crc) {                               
         if(humidity){
             uint32_t raw_humid = rxdata[1];
             raw_humid <<= 8;
@@ -87,10 +89,10 @@ int dht20_read_data(float *temperature, float *humidity)
             *temperature = (float)(raw_temp / 1048576.0f) * 200.0f - 50.0f;
         }
         return ESP_OK;
-    } 
+    // } 
 
-    ESP_LOGE(__func__, "CRC Checksum failed !!!");
-    return ESP_ERR_INVALID_CRC;
+    // ESP_LOGE(__func__, "CRC Checksum failed !!!");
+    // return ESP_ERR_INVALID_CRC;
 }
 
 static uint8_t dht20_crc8(uint8_t *message, uint8_t Num)

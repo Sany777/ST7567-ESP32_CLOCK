@@ -18,7 +18,7 @@ extern "C" {
 uint8_t dht20_status(void);
 int dht20_read_data(float *temperature, float *humidity);
 bool dht20_is_calibrated(void);
-
+int dht20_wait();
 
 
 

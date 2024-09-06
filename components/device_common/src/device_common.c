@@ -35,6 +35,7 @@ static const char *MAIN_DATA_NAME = "main_data";
 static const char *NOTIFY_DATA_NAME = "notify_data";
 
 static int read_data();
+static void update_volt_val();
 
 float volt;
 
@@ -42,27 +43,31 @@ float volt;
 float device_get_volt()
 {
     static int count = 0;
-    if(count % 5 == 0 || volt < 3.0){
-        measure_volt();
-        create_periodic_task(measure_volt, 1000, 5);
+    if(count % 5 == 0 || volt < 3.4){
+        update_volt_val();
+        if(volt < 3.0){
+            create_periodic_task(update_volt_val, 2000, 1);
+        }
     }
     count += 1;
     return volt;
 }
 
-void measure_volt()
+static void update_volt_val()
 {
-    float volt_val = adc_reader_get_voltage();
-    unsigned bits = device_get_state();
+    unsigned bits;
+    const float volt_val = adc_reader_get_voltage();
     if(volt_val > 2.0){
         if(volt_val < 3.3){
-            esp_deep_sleep(0xffffffff);
+            esp_deep_sleep(UINT64_MAX);
         }
         if(volt_val < 3.5){
+            bits = device_get_state();
             if(! (bits&BIT_IS_LOW_BAT) ){
                 device_set_state(BIT_IS_LOW_BAT|BIT_NEW_DATA);
             }
         } else {
+            bits = device_get_state();
             if( bits&BIT_IS_LOW_BAT){
                 device_clear_state(BIT_IS_LOW_BAT);
                 device_set_state(BIT_NEW_DATA);
@@ -72,11 +77,16 @@ void measure_volt()
     }
 }
 
-static void update_charge_status_handler()
+static void check_bat_status_handler()
 {
     if(volt < 3.4 && device_get_volt() < 3.4){
-        start_signale_series(20,5,1500);
+        start_signale_series(20, 5, 1500);
     }
+}
+
+static void update_time_handler()
+{
+    device_set_state(BIT_NEW_MIN);
 }
 
 void device_set_offset(int time_offset)
@@ -231,7 +241,6 @@ int device_get_offset()
     return main_data.time_offset;
 }
 
-
 static int read_data()
 {
     service_data.update_data_time = NO_DATA;
@@ -269,15 +278,6 @@ bool is_signale(struct tm *tm_info)
     return false;
 }
 
-static void update_time_handler()
-{
-    static int min;
-    int cur_min = get_time_tm()->tm_min;
-    if(min != cur_min){
-        min = cur_min;
-        device_set_state(BIT_NEW_MIN);
-    } 
-}
 
 void device_init()
 {
@@ -287,10 +287,9 @@ void device_init()
     read_data();
     I2C_init();
     wifi_init();
-    create_periodic_task(update_charge_status_handler, 600, FOREVER);
-    create_periodic_task(update_time_handler, 1, FOREVER);
+    create_periodic_task(check_bat_status_handler, 6000000, FOREVER);
+    create_periodic_task(update_time_handler, 60000, FOREVER);
 }
-
 
 
 void device_set_state_isr(unsigned bits)

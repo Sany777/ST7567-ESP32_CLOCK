@@ -23,7 +23,7 @@ int create_periodic_isr_task(periodic_func_t func,
                             uint64_t delay_ms, 
                             unsigned count);
 int create_periodic_task(periodic_func_t func,
-                            uint64_t delay_sec, 
+                            uint64_t delay_ms, 
                             unsigned count);
 void restart_timer();
 long long get_timer_ms();

@@ -114,7 +114,7 @@ unsigned get_notif_num(unsigned *schema);
 void device_init();
 
 float device_get_volt();
-void measure_volt();
+
 
 
 

@@ -37,7 +37,7 @@ static int periodic_task_create(periodic_task_list_data_t *list,
                                             periodic_func_t func,
                                             uint64_t delay_ms, 
                                             unsigned count);
-static void tasks_run(periodic_task_list_data_t *list, size_t list_size, uint64_t decrement_val);
+static void tasks_run(periodic_task_list_data_t *list, size_t list_size, uint64_t time_val);
 static  void periodic_timer_cb(void*);
 
 static periodic_task_list_data_t* IRAM_ATTR find_task(periodic_task_list_data_t *list, 
@@ -133,7 +133,7 @@ int IRAM_ATTR create_periodic_isr_task(periodic_func_t func,
 
 
 int IRAM_ATTR create_periodic_task(periodic_func_t func,
-                            uint64_t delay_sec, 
+                            uint64_t delay_ms, 
                             unsigned count)
 {
     if(task_runner_handle){
@@ -142,7 +142,7 @@ int IRAM_ATTR create_periodic_task(periodic_func_t func,
     int res = periodic_task_create(periodic_task_list, 
                                     MAX_TASKS_NUM, 
                                     func, 
-                                    delay_sec, 
+                                    delay_ms, 
                                     count);
     if(task_runner_handle){
         vTaskResume(task_runner_handle);
@@ -163,12 +163,12 @@ long long IRAM_ATTR get_timer_ms()
     return ms;
 }
 
-static void tasks_run(periodic_task_list_data_t *list, size_t list_size, uint64_t decrement_val)
+static void tasks_run(periodic_task_list_data_t *list, size_t list_size, uint64_t time_val)
 {
     const periodic_task_list_data_t *end = list+list_size;
     while(list < end){
         if(list->delay > 0){
-            list->delay -= MIN(decrement_val, list->delay);
+            list->delay -= MIN(time_val, list->delay);
             if(list->delay == 0){
                 if(list->count > 0)list->count -= 1;
                 if(list->count != 0)list->delay = list->delay_init;
@@ -203,7 +203,7 @@ void task_runner_deinit()
 
 static void runner_task(void *pvParameters)
 {
-    unsigned time_dif;
+    unsigned time_dif_sec;
     struct tm *tinfo = get_time_tm();
     int cur_time = get_time_sec(tinfo);
     int last_time_val = cur_time;
@@ -211,17 +211,17 @@ static void runner_task(void *pvParameters)
     for(;;){
         vTaskDelay(1000/portTICK_PERIOD_MS);
         if(! init && tinfo->tm_year != 70){
-            time_dif = 1;
+            time_dif_sec = 1;
             init = true;
         } else {
             cur_time = get_time_sec(tinfo);
             if(cur_time > last_time_val){
-                time_dif = cur_time - last_time_val;
+                time_dif_sec = cur_time - last_time_val;
             } else {
-                time_dif = cur_time + 86400 - last_time_val;
+                time_dif_sec = cur_time + 86400 - last_time_val;
             }
         }
-        tasks_run(periodic_task_list, MAX_TASKS_NUM, time_dif);
+        tasks_run(periodic_task_list, MAX_TASKS_NUM, time_dif_sec*1000);
         last_time_val = cur_time;
     }
 }
