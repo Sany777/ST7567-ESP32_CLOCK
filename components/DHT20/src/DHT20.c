@@ -63,36 +63,29 @@ int dht20_read_data(float *temperature, float *humidity)
     uint8_t txbuf[3] = {0xAC, 0x33, 0x00};             
     uint8_t rxdata[7] = {0};                         
     I2C_write_bytes(DHT20_I2C_ADDRESS, txbuf, sizeof(txbuf));
-    vTaskDelay( 80 / portTICK_PERIOD_MS);                
+    vTaskDelay(80 / portTICK_PERIOD_MS);                
 
     CHECK_AND_RET_ERR(dht20_wait());
 
     I2C_read_bytes(DHT20_I2C_ADDRESS, rxdata, sizeof(rxdata));              
-
-    // uint8_t get_crc = dht20_crc8(rxdata, sizeof(rxdata)-1);                    
-
-    // if (rxdata[6] == get_crc) {                               
-        if(humidity){
-            uint32_t raw_humid = rxdata[1];
-            raw_humid <<= 8;
-            raw_humid += rxdata[2];
-            raw_humid <<= 4;
-            raw_humid += rxdata[3] >> 4;
-            *humidity = (float)(raw_humid / 1048576.0f) * 100.0f;                                      // convert RAW to Humidity in %
-        }
-        if(temperature){
-            uint32_t raw_temp = (rxdata[3] & 0x0F);
-            raw_temp <<= 8;
-            raw_temp += rxdata[4];
-            raw_temp <<= 8;
-            raw_temp += rxdata[5];
-            *temperature = (float)(raw_temp / 1048576.0f) * 200.0f - 50.0f;
-        }
-        return ESP_OK;
-    // } 
-
-    // ESP_LOGE(__func__, "CRC Checksum failed !!!");
-    // return ESP_ERR_INVALID_CRC;
+                            
+    if(humidity){
+        uint32_t raw_humid = rxdata[1];
+        raw_humid <<= 8;
+        raw_humid += rxdata[2];
+        raw_humid <<= 4;
+        raw_humid += rxdata[3] >> 4;
+        *humidity = (float)(raw_humid / 1048576.0f) * 100.0f;       
+    }
+    if(temperature){
+        uint32_t raw_temp = (rxdata[3] & 0x0F);
+        raw_temp <<= 8;
+        raw_temp += rxdata[4];
+        raw_temp <<= 8;
+        raw_temp += rxdata[5];
+        *temperature = (float)(raw_temp / 1048576.0f) * 200.0f - 50.0f;
+    }
+    return ESP_OK;
 }
 
 static uint8_t dht20_crc8(uint8_t *message, uint8_t Num)

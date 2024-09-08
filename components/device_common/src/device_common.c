@@ -256,7 +256,7 @@ static int read_data()
 }
 
 
-bool is_signale(struct tm *tm_info)
+bool is_signale(const struct tm *tm_info)
 {
     if(tm_info->tm_wday == 0) return false;
     int cur_min = tm_info->tm_hour*60 + tm_info->tm_min;
@@ -287,7 +287,7 @@ void device_init()
     read_data();
     I2C_init();
     wifi_init();
-    create_periodic_task(check_bat_status_handler, 6000000, FOREVER);
+    create_periodic_task(check_bat_status_handler, 600000, FOREVER);
     create_periodic_task(update_time_handler, 60000, FOREVER);
 }
 

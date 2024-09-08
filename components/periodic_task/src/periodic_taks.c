@@ -5,7 +5,7 @@
 #include "portmacro.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-
+#include "device_common.h"
 #include "clock_module.h"
 #include "device_macro.h"
 
@@ -147,7 +147,7 @@ int IRAM_ATTR create_periodic_task(periodic_func_t func,
     if(task_runner_handle){
         vTaskResume(task_runner_handle);
     } else {
-        xTaskCreate(runner_task, "task_runner", 5000, NULL, 5, &task_runner_handle);
+        xTaskCreate(runner_task, "task_runner", 5000, NULL, 10, &task_runner_handle);
         if(task_runner_handle == NULL) return ESP_FAIL;
     }
     return res;
@@ -210,6 +210,7 @@ static void runner_task(void *pvParameters)
     bool init = false;
     for(;;){
         vTaskDelay(1000/portTICK_PERIOD_MS);
+        device_set_state(BIT_WAIT_PERIODIC_TASK);
         if(! init && tinfo->tm_year != 70){
             time_dif_sec = 1;
             init = true;
@@ -223,5 +224,6 @@ static void runner_task(void *pvParameters)
         }
         tasks_run(periodic_task_list, MAX_TASKS_NUM, time_dif_sec*1000);
         last_time_val = cur_time;
+        device_clear_state(BIT_WAIT_PERIODIC_TASK);
     }
 }
