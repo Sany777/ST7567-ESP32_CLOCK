@@ -1,12 +1,13 @@
-#include "adc_reader.h"
+#include "voltage_controller.h"
 
 #include <stdio.h>
 #include "driver/adc.h"
-#include "esp_log.h"
-#include "adc_reader.h"
-#include "device_common.h"
-
+#include "esp_sleep.h"
 #include "freertos/FreeRTOS.h"
+
+// #include "periodic_task.h"
+// #include "sound_generator.h"
+// #include "device_common.h"
 
 
 
@@ -17,18 +18,14 @@
 
 
 
-static const char *TAG = "ADC_READER";
-
-
-void adc_reader_init(void)
+void voltage_reader_init(void)
 {
     adc1_config_width(ADC_WIDTH_BIT_12);
     adc2_config_channel_atten(ADC_CHANNEL, ADC_ATTEN);
-    ESP_LOGI(TAG, "ADC Initialized");
 }
 
 
-float adc_reader_get_voltage(void)
+float device_get_voltage(void)
 {
     int adc_value = 0;
     adc2_get_raw(ADC_CHANNEL,ADC_WIDTH_BIT_12, &adc_value);

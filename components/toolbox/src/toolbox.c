@@ -7,7 +7,7 @@
 
 int get_actual_forecast_data_index(struct tm *tm_info, int update_data_time)
 {
-    unsigned time_dif;
+    int time_dif;
     if(update_data_time < 0 
         || tm_info->tm_hour < 0
         || update_data_time > 23 

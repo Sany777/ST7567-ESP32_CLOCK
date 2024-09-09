@@ -10,6 +10,8 @@
 #include "esp_timer.h"
 #include "driver/gpio.h"
 
+#define WAIT_BUT_INP 5000
+
 
 static void end_wait_but_inp_handler();
 
@@ -47,7 +49,7 @@ static void IRAM_ATTR encoder_isr_handler(void* arg)
                 encoder_value--;
             }
             device_set_state_isr(BIT_ENCODER_ROTATE|BIT_WAIT_BUT_INPUT);
-            create_periodic_isr_task(end_wait_but_inp_handler, 4000, 1);
+            create_periodic_task(end_wait_but_inp_handler, WAIT_BUT_INP, 1);
             counter = 0;
         }
     }
@@ -73,16 +75,16 @@ static void end_but_input_handler()
             but_count += 1;
         } else {
             device_set_state_isr(BIT_BUT_LONG_PRESSED);
-            remove_isr_task(end_but_input_handler);
-            create_periodic_isr_task(end_wait_but_inp_handler, 5000, 1);
+            remove_task(end_but_input_handler);
+            create_periodic_task(end_wait_but_inp_handler, WAIT_BUT_INP, 1);
             but_count = 0;
         }
     } else if(but_count){
         but_count -= 1;
     } else {
         device_set_state_isr(BIT_BUT_PRESSED);
-        remove_isr_task(end_but_input_handler);
-        create_periodic_isr_task(end_wait_but_inp_handler, 5000, 1);
+        remove_task(end_but_input_handler);
+        create_periodic_task(end_wait_but_inp_handler, WAIT_BUT_INP, 1);
     }
 }
 
@@ -91,7 +93,7 @@ static void IRAM_ATTR button_isr_handler(void* arg)
 {
     if(but_count == 0){
         device_set_state_isr(BIT_WAIT_BUT_INPUT);
-        create_periodic_isr_task(end_but_input_handler, 200, FOREVER);
+        create_periodic_task(end_but_input_handler, 200, FOREVER);
     }
 }
 

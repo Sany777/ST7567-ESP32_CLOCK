@@ -105,12 +105,13 @@ int connect_sta(const char *ssid, const char *pwd)
     strncpy((char *)wifi_sta_config.sta.ssid, ssid, sizeof(wifi_sta_config.sta.ssid)-1);
     strncpy((char *)wifi_sta_config.sta.password, pwd, sizeof(wifi_sta_config.sta.password)-1);
     wifi_sta_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
-    wifi_mode = WIFI_MODE_STA;
 
     if (wifi_mode == WIFI_MODE_AP){
         wifi_stop(); 
     }
 
+    wifi_mode = WIFI_MODE_STA;
+    
     if(netif == NULL){
         netif = esp_netif_create_default_wifi_sta();
         if(netif == NULL) return ESP_FAIL;

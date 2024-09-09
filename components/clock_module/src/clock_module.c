@@ -1,15 +1,16 @@
 #include "clock_module.h"
 
 #include <time.h>
-#include "device_common.h"
 #include "string.h"
 #include "esp_sntp.h"
 #include "wifi_service.h"
 #include "esp_err.h"
 
+#include "device_common.h"
+#include "periodic_task.h"
 #include "toolbox.h"
 
-#define INTERVAL_20_HOUR   (1000*60*60*20)
+#define INTERVAL_8_HOUR   (1000*60*60*8)
 
 
 
@@ -64,7 +65,7 @@ void init_sntp()
         esp_sntp_setservername(0, "pool.ntp.org");
         esp_sntp_setservername(1, "time.windows.com");
         sntp_servermode_dhcp(0);
-        esp_sntp_set_sync_interval(6000);
+        esp_sntp_set_sync_interval(INTERVAL_8_HOUR);
         esp_sntp_init();
     }
 }

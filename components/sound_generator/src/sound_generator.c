@@ -48,7 +48,7 @@ static void IRAM_ATTR continue_signale()
 {
     device_set_state(BIT_WAIT_SIGNALE);
     ledc_timer_resume(ledc_timer.speed_mode, ledc_timer.timer_num);
-    create_periodic_isr_task(stop_signale, _delay/2, 1);
+    create_periodic_task(stop_signale, _delay/2, 1);
 }
 
 void start_single_signale(unsigned delay, unsigned freq)
@@ -69,15 +69,15 @@ void alarm()
 void start_alarm()
 {
     if(!(device_get_state()&BIT_WAIT_SIGNALE) ){
-        create_periodic_isr_task(alarm, 1000, 5);
+        create_periodic_task(alarm, 1000, 5);
     }
 }
 
 void sound_off()
 {
-    remove_isr_task(alarm);
-    remove_isr_task(continue_signale);
-    remove_isr_task(stop_signale);
+    remove_task(alarm);
+    remove_task(continue_signale);
+    remove_task(stop_signale);
     stop_signale();
 }
 
@@ -89,9 +89,9 @@ void start_signale_series(unsigned delay, unsigned count, unsigned freq)
         if(delay == 0)_delay = DEFAULT_DELAY;
         else _delay = delay;
         if(count>1){
-            create_periodic_isr_task(continue_signale, _delay, count-1);
+            create_periodic_task(continue_signale, _delay, count-1);
         }
-        create_periodic_isr_task(stop_signale, _delay/2, 1);
+        create_periodic_task(stop_signale, _delay/2, 1);
     }
 }
 
