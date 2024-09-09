@@ -42,11 +42,11 @@ static void IRAM_ATTR stop_signale();
 
 static void init_pwm(unsigned freq_hz);
 static void start_pwm(unsigned duty);
-
+static void alarm();
 
 static void IRAM_ATTR continue_signale()
 {
-    device_set_state(BIT_WAIT_SIGNALE);
+    device_set_state_isr(BIT_WAIT_SIGNALE);
     ledc_timer_resume(ledc_timer.speed_mode, ledc_timer.timer_num);
     create_periodic_task(stop_signale, _delay/2, 1);
 }
@@ -61,16 +61,14 @@ void set_loud(unsigned loud)
     _loud = loud;
 }
 
-void alarm()
+static void alarm()
 {
     start_signale_series(100, 5, 1200);
 }
 
 void start_alarm()
 {
-    if(!(device_get_state()&BIT_WAIT_SIGNALE) ){
-        create_periodic_task(alarm, 1000, 5);
-    }
+    create_periodic_task(alarm, 1000, 5);
 }
 
 void sound_off()
@@ -83,11 +81,11 @@ void sound_off()
 
 void start_signale_series(unsigned delay, unsigned count, unsigned freq)
 {
-    if(!(device_get_state()&BIT_WAIT_SIGNALE) ){
+    if( !(device_get_state()&BIT_WAIT_SIGNALE)){
         init_pwm(freq);
-        start_pwm(_loud);
         if(delay == 0)_delay = DEFAULT_DELAY;
         else _delay = delay;
+        start_pwm(_loud);
         if(count>1){
             create_periodic_task(continue_signale, _delay, count-1);
         }
@@ -98,7 +96,7 @@ void start_signale_series(unsigned delay, unsigned count, unsigned freq)
 static IRAM_ATTR void stop_signale()
 {
     ledc_timer_pause(ledc_timer.speed_mode, ledc_timer.timer_num);
-    device_clear_state(BIT_WAIT_SIGNALE);
+    device_clear_state_isr(BIT_WAIT_SIGNALE);
 }
 
 static void init_pwm(unsigned freq_hz)
@@ -111,7 +109,7 @@ static void init_pwm(unsigned freq_hz)
 
 static void start_pwm(unsigned duty)
 {
-    device_set_state(BIT_WAIT_SIGNALE);
+    device_set_state_isr(BIT_WAIT_SIGNALE);
     if(duty > 99 || duty == 0) duty = DEFAULT_DUTY;
     ledc_set_duty(ledc_channel.speed_mode, ledc_channel.channel, duty);
     ledc_update_duty(ledc_channel.speed_mode, ledc_channel.channel);

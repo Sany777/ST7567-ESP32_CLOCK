@@ -538,7 +538,7 @@ CONFIG_DAC_DMA_AUTO_16BIT_ALIGN=y
 #
 # LEDC Configuration
 #
-# CONFIG_LEDC_CTRL_FUNC_IN_IRAM is not set
+CONFIG_LEDC_CTRL_FUNC_IN_IRAM=y
 # end of LEDC Configuration
 
 #
