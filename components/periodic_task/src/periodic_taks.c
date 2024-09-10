@@ -9,7 +9,7 @@
 #include "clock_module.h"
 #include "device_macro.h"
 
-#define MAX_TASKS_NUM 15
+#define MAX_TASKS_NUM 20
 
 
 typedef struct {
@@ -19,10 +19,9 @@ typedef struct {
     uint64_t delay;
 }periodic_task_list_data_t;
 
-esp_timer_handle_t periodic_timer = NULL;
-SemaphoreHandle_t timer_semaphore;
-
-
+static portMUX_TYPE critical_mux = portMUX_INITIALIZER_UNLOCKED;
+static esp_timer_handle_t periodic_timer = NULL;
+static SemaphoreHandle_t timer_semaphore;
 static long long time_val = 0, before_sleep = 0;
 static periodic_task_list_data_t periodic_task_list[MAX_TASKS_NUM] = {0};
 
@@ -54,17 +53,27 @@ static periodic_task_list_data_t* IRAM_ATTR find_task(periodic_task_list_data_t 
 }
 
 
+void remove_task_isr(periodic_func_t func)
+{
+    portENTER_CRITICAL(&critical_mux);
+    periodic_task_list_data_t*to_delete = find_task(periodic_task_list, MAX_TASKS_NUM, func);
+    if(to_delete){
+        to_delete->count = to_delete->delay = 0;
+    }
+    portEXIT_CRITICAL(&critical_mux);
+}
+
 void remove_task(periodic_func_t func)
 {
-    device_stop_timer();
-    if (xSemaphoreTake(timer_semaphore, 10000/portTICK_PERIOD_MS) == pdTRUE) {
+    if (xSemaphoreTake(timer_semaphore, portMAX_DELAY) == pdTRUE) {
+        device_stop_timer();
         periodic_task_list_data_t*to_delete = find_task(periodic_task_list, MAX_TASKS_NUM, func);
         if(to_delete){
             to_delete->count = to_delete->delay = 0;
         }
+        device_start_timer();
         xSemaphoreGive(timer_semaphore);
     }
-    device_start_timer();
 }
 
 static int IRAM_ATTR insert_task_to_list(
@@ -97,21 +106,36 @@ static int IRAM_ATTR insert_task_to_list(
     return res;
 }
 
+int IRAM_ATTR create_periodic_task_isr(periodic_func_t func,
+                            uint64_t delay_ms, 
+                            int count)
+{
+    int res = ESP_FAIL;
+    portENTER_CRITICAL(&critical_mux);
+    res = insert_task_to_list(periodic_task_list, 
+                                    MAX_TASKS_NUM, 
+                                    func, 
+                                    delay_ms, 
+                                    count);
+    portEXIT_CRITICAL(&critical_mux);
+    return res;
+}
+
 int IRAM_ATTR create_periodic_task(periodic_func_t func,
                             uint64_t delay_ms, 
                             int count)
 {
     int res = ESP_FAIL;
-    device_stop_timer();
     if (xSemaphoreTake(timer_semaphore, portMAX_DELAY) == pdTRUE) {
+        device_stop_timer();
         res = insert_task_to_list(periodic_task_list, 
                                         MAX_TASKS_NUM, 
                                         func, 
                                         delay_ms, 
                                         count);
         xSemaphoreGive(timer_semaphore);
+        device_start_timer();
     }
-    device_start_timer();
     return res;
 }
 
@@ -154,7 +178,7 @@ int device_start_timer()
     return res;
 }
 
-static  void IRAM_ATTR periodic_timer_cb(void*)
+static void IRAM_ATTR periodic_timer_cb(void*)
 {
     periodic_task_list_data_t *list = periodic_task_list;
     const periodic_task_list_data_t *end = list+MAX_TASKS_NUM;

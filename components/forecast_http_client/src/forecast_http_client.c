@@ -110,6 +110,7 @@ static void split(char *data_buf, size_t data_size, const char *split_chars_str)
         ++ptr;
     }
 }
+#include "esp_log.h"
 
 int get_weather(const char *city, const char *api_key)
 {
@@ -136,9 +137,7 @@ int get_weather(const char *city, const char *api_key)
     esp_http_client_perform(client);
     const size_t data_size = esp_http_client_get_content_length(client);
     if(data_size){
-
         network_buf[data_size] = 0;
-        
         const size_t pop_num = get_value_ptrs(&pop_list, network_buf, data_size, "\"pop\":");
         const size_t feels_like_num = get_value_ptrs(&feels_like_list, network_buf, data_size, "\"feels_like\":");
         const size_t description_num = get_value_ptrs(&description_list, network_buf, data_size, "\"description\":\"");
@@ -157,7 +156,7 @@ int get_weather(const char *city, const char *api_key)
 
         if(dt_list){
             time_t time_now  = atol(dt_list[0]);
-            struct tm * tinfo = localtime(&time_now);
+            struct tm * tinfo = gmtime(&time_now);
             service_data.update_data_time = tinfo->tm_hour;
             free(dt_list);
             dt_list = NULL;

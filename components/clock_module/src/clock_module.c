@@ -64,7 +64,7 @@ void init_sntp()
         esp_sntp_setoperatingmode(ESP_SNTP_OPMODE_POLL);
         esp_sntp_setservername(0, "pool.ntp.org");
         esp_sntp_setservername(1, "time.windows.com");
-        sntp_servermode_dhcp(0);
+        esp_sntp_servermode_dhcp(0);
         esp_sntp_set_sync_interval(INTERVAL_8_HOUR);
         esp_sntp_init();
     }

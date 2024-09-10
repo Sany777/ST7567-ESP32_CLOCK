@@ -84,7 +84,7 @@ void start_signale_series(unsigned delay, unsigned count, unsigned freq)
     if( !(device_get_state()&BIT_WAIT_SIGNALE)){
         init_pwm(freq);
         if(delay == 0)_delay = DEFAULT_DELAY;
-        else _delay = delay;
+        else _delay = delay*2;
         start_pwm(_loud);
         if(count>1){
             create_periodic_task(continue_signale, _delay, count-1);

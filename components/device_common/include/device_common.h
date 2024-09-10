@@ -40,14 +40,14 @@ enum Bits{
     BIT_BUT_PRESSED             = (1<<14),
     BIT_WAIT_BUT_INPUT          = (1<<15),
     BIT_NEW_DATA                = (1<<16),
-    BIT_WAIT_PERIODIC_TASK      = (1<<17),
     BIT_WAIT_SIGNALE            = (1<<18),
     BIT_BUT_LONG_PRESSED        = (1<<19),
     BIT_ERR_SSID_NOT_FOUND      = (1<<20),
     BIT_NEW_MIN                 = (1<<21),
     BIT_CHECK_BAT               = (1<<22),
+    BIT_NEW_T_MIN               = (1<<23),
     STORED_FLAGS                = (BIT_NOTIF_ENABLE),
-    BITS_DENIED_SLEEP           = (BIT_WAIT_PROCCESS|BIT_WAIT_BUT_INPUT|BIT_WAIT_PERIODIC_TASK|BIT_WAIT_SIGNALE),
+    BITS_DENIED_SLEEP           = (BIT_WAIT_PROCCESS|BIT_WAIT_BUT_INPUT),
     BITS_NEW_BUT_DATA           = (BIT_BUT_PRESSED|BIT_BUT_LONG_PRESSED|BIT_ENCODER_ROTATE)
 };
 
