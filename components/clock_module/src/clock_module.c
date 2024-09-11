@@ -56,7 +56,6 @@ static void set_time_cb(struct timeval *tv)
 
 void init_sntp()
 {
-
     esp_sntp_set_time_sync_notification_cb(set_time_cb);
     esp_sntp_set_sync_mode(SNTP_SYNC_MODE_IMMED);
     esp_sntp_setoperatingmode(ESP_SNTP_OPMODE_POLL);
@@ -71,7 +70,6 @@ void init_sntp()
 void stop_sntp()
 {
     esp_sntp_stop();
-    device_clear_state(BIT_SNTP_OK);
 }
 
 // format :

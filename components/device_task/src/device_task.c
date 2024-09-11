@@ -89,18 +89,16 @@ static float temp;
 static int timer_counter = 0;
 static bool timer_run;
 static long long counter;
+static float volt_val;
 
 static void update_forecast_handler();
-static void update_time_handler();
 static void timer_counter_handler();
-static void init_update_data_handler();
 static void check_bat_status_handler();
 
 
 
 static void main_task(void *pv)
 {
-    float volt_val;
     unsigned bits;
     int screen = NO_DATA;
     int cmd = NO_DATA;
@@ -117,12 +115,12 @@ static void main_task(void *pv)
 
     for(;;){
 
+        device_start_timer();
         device_set_pin(PIN_DHT20_EN, 1);
         if(dht20_wait() == ESP_OK){
             dht20_read_data(&temp, NULL);
         }
         device_set_pin(PIN_DHT20_EN, 0);
-        device_start_timer();
         device_set_state(BIT_NEW_DATA);
         counter = esp_timer_get_time();
         while(1){
@@ -197,6 +195,7 @@ static void main_task(void *pv)
                         cmd = CMD_UPDATE_DATA;
                     }
                     device_clear_state(BIT_CHECK_BAT);
+                    cmd = CMD_UPDATE_DATA;
                 }
             }
             
@@ -481,7 +480,7 @@ static void main_func(int cmd)
 
     if(bits&BIT_IS_LOW_BAT){
         lcd_printf(1, 1, FONT_SIZE_9, COLORED, "%u%%", 
-            battery_voltage_to_percentage(device_get_voltage()));
+            battery_voltage_to_percentage(volt_val));
         lcd_draw_rectangle(0, 0, 32, 10, COLORED);
         lcd_draw_rectangle(32, 3, 4, 4, COLORED);
         ver_desc = 11;
@@ -514,6 +513,9 @@ static void device_info_func(int cmd)
     
     const unsigned bits = device_get_state();
     float voltage = device_get_voltage();
+    if(voltage < 3.0){
+        voltage = volt_val;
+    }
     lcd_printf_centered(3, FONT_SIZE_9, COLORED, "Bat:%u%%, %.2fV", 
                         battery_voltage_to_percentage(voltage), 
                         voltage);
@@ -618,7 +620,7 @@ static void timer_counter_handler()
     } else {
         remove_task_isr(timer_counter_handler);
     }
-    device_set_state_isr(BIT_NEW_DATA|BIT_NEW_T_MIN); 
+    device_set_state_isr(BIT_NEW_T_MIN); 
 }
 
 static void check_bat_status_handler()
