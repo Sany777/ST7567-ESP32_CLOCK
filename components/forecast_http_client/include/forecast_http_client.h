@@ -10,7 +10,7 @@ extern "C" {
 
 
 
-int get_weather(const char *city, const char *api_key);
+int update_forecast(const char *city, const char *api_key);
 
 extern char network_buf[];
 

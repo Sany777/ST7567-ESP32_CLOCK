@@ -111,7 +111,7 @@ static void main_task(void *pv)
     next_screen = SCREEN_MAIN;
     device_set_pin(PIN_LCD_BACKLIGHT_EN, 0);
     lcd_init();
-    device_set_state(BIT_UPDATE_FORECAST_DATA|BIT_CHECK_BAT|BIT_WAIT_PROCCESS);
+    device_set_state(BIT_UPDATE_FORECAST_DATA|BIT_CHECK_BAT);
     create_periodic_task(check_bat_status_handler, INTERVAL_CHECK_BAT, FOREVER);
     bool backlight_en = false;
 
@@ -182,7 +182,7 @@ static void main_task(void *pv)
                 volt_val = device_get_voltage();
                 if(volt_val > 2.0){
                     if(volt_val < 3.5){
-                        if(volt_val < 3.3){
+                        if(volt_val < 3.2){
                             device_set_pin(PIN_LCD_BACKLIGHT_EN, 0);
                             device_set_pin(PIN_DHT20_EN, 0);
                             esp_deep_sleep(UINT64_MAX);
@@ -293,13 +293,10 @@ static void service_task(void *pv)
                 }
                 if(! (bits&BIT_IS_TIME) ){
                     init_sntp();
-                    bits = device_wait_bits(BIT_IS_TIME);
-                    if(bits&BIT_IS_TIME){
-                        create_periodic_task(update_time_handler, TIMEOUT_MINUTE, FOREVER);
-                        create_periodic_task(init_update_data_handler, INTERVAL_UPDATE_DATA, FOREVER);
-                    }
+                    device_wait_bits(BIT_IS_TIME);
+                    stop_sntp();
                 }
-                esp_res = get_weather(device_get_city_name(),device_get_api_key());
+                esp_res = update_forecast(device_get_city_name(),device_get_api_key());
             }
             
             if(esp_res == ESP_OK){
@@ -483,7 +480,8 @@ static void main_func(int cmd)
     int ver_desc;
 
     if(bits&BIT_IS_LOW_BAT){
-        lcd_printf(1, 1, FONT_SIZE_9, COLORED, "%.2f", device_get_voltage());
+        lcd_printf(1, 1, FONT_SIZE_9, COLORED, "%u%%", 
+            battery_voltage_to_percentage(device_get_voltage()));
         lcd_draw_rectangle(0, 0, 32, 10, COLORED);
         lcd_draw_rectangle(32, 3, 4, 4, COLORED);
         ver_desc = 11;
@@ -515,8 +513,10 @@ static void device_info_func(int cmd)
     }
     
     const unsigned bits = device_get_state();
-
-    lcd_printf(5, 7, FONT_SIZE_9, COLORED, "Battery:%.2fV", device_get_voltage());
+    float voltage = device_get_voltage();
+    lcd_printf_centered(3, FONT_SIZE_9, COLORED, "Bat:%u%%, %.2fV", 
+                        battery_voltage_to_percentage(voltage), 
+                        voltage);
 
     lcd_draw_line(1, 16, 127, COLORED, HORISONTAL, 1);
     lcd_draw_line(0, 17, 128, COLORED, HORISONTAL, 1);
@@ -610,16 +610,6 @@ static void update_forecast_handler()
     device_set_state_isr(BIT_UPDATE_FORECAST_DATA);
 }
 
-static void update_time_handler()
-{
-    device_set_state_isr(BIT_NEW_MIN);
-}
-
-static void init_update_data_handler()
-{
-    device_clear_state_isr(BIT_IS_TIME);
-    device_set_state_isr(BIT_UPDATE_FORECAST_DATA);
-}
 
 static void timer_counter_handler()
 {
@@ -628,7 +618,7 @@ static void timer_counter_handler()
     } else {
         remove_task_isr(timer_counter_handler);
     }
-    device_set_state_isr(BIT_NEW_DATA); 
+    device_set_state_isr(BIT_NEW_DATA|BIT_NEW_T_MIN); 
 }
 
 static void check_bat_status_handler()

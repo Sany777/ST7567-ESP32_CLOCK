@@ -56,18 +56,15 @@ static void set_time_cb(struct timeval *tv)
 
 void init_sntp()
 {
-    if(esp_sntp_enabled()){
-        esp_sntp_restart();
-    } else {
-        esp_sntp_set_time_sync_notification_cb(set_time_cb);
-        esp_sntp_set_sync_mode(SNTP_SYNC_MODE_IMMED);
-        esp_sntp_setoperatingmode(ESP_SNTP_OPMODE_POLL);
-        esp_sntp_setservername(0, "pool.ntp.org");
-        esp_sntp_setservername(1, "time.windows.com");
-        esp_sntp_servermode_dhcp(0);
-        esp_sntp_set_sync_interval(INTERVAL_8_HOUR);
-        esp_sntp_init();
-    }
+
+    esp_sntp_set_time_sync_notification_cb(set_time_cb);
+    esp_sntp_set_sync_mode(SNTP_SYNC_MODE_IMMED);
+    esp_sntp_setoperatingmode(ESP_SNTP_OPMODE_POLL);
+    esp_sntp_setservername(0, "pool.ntp.org");
+    esp_sntp_setservername(1, "time.windows.com");
+    esp_sntp_servermode_dhcp(1);
+    esp_sntp_init();
+
 }
 
 
