@@ -8,6 +8,7 @@
 #define SIZE_URL_BUF 250
 #define MAX_KEY_NUM 10
 
+extern char network_buf[];
 static char url_buf[SIZE_URL_BUF];
 
 
@@ -112,7 +113,7 @@ static void split(char *data_buf, size_t data_size, const char *split_chars_str)
 }
 #include "esp_log.h"
 
-int update_forecast(const char *city, const char *api_key)
+int update_forecast_data(const char *city, const char *api_key)
 {
     int res = ESP_FAIL;
     char **feels_like_list = NULL, **description_list = NULL, **pop_list = NULL, **dt_list = NULL; 

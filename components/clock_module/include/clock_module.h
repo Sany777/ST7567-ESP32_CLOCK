@@ -11,7 +11,7 @@ extern "C" {
 #include "stdbool.h"
 
 
-struct tm* get_time_tm(void);
+struct tm* get_cur_time_tm(void);
 int get_time_sec(struct tm* tinfo);
 void init_sntp();
 void stop_sntp();

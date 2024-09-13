@@ -10,9 +10,9 @@ extern "C" {
 
 
 
-int update_forecast(const char *city, const char *api_key);
+int update_forecast_data(const char *city, const char *api_key);
 
-extern char network_buf[];
+
 
 
 

@@ -33,7 +33,7 @@ enum Bits{
     BIT_IS_TIME                 = (1<<7),
     BIT_SERVER_RUN              = (1<<8),
     BIT_IS_AP_CLIENT            = (1<<9),
-    BIT_WAIT_PROCCESS           = (1<<10),
+    BIT_PERIOD_CMPLT            = (1<<10),
     BIT_START_SERVER            = (1<<11),
     BIT_UPDATE_FORECAST_DATA    = (1<<12),
     BIT_IS_LOW_BAT              = (1<<13),
@@ -47,7 +47,7 @@ enum Bits{
     BIT_CHECK_BAT               = (1<<22),
     BIT_NEW_T_MIN               = (1<<23),
     STORED_FLAGS                = (BIT_NOTIF_ENABLE),
-    BITS_DENIED_SLEEP           = (BIT_WAIT_PROCCESS|BIT_WAIT_BUT_INPUT|BIT_UPDATE_FORECAST_DATA|BIT_START_SERVER),
+    BITS_DENIED_SLEEP           = (BIT_WAIT_BUT_INPUT|BIT_UPDATE_FORECAST_DATA|BIT_START_SERVER),
     BITS_NEW_BUT_DATA           = (BIT_BUT_PRESSED|BIT_BUT_LONG_PRESSED|BIT_ENCODER_ROTATE)
 };
 

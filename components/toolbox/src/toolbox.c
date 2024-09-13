@@ -12,17 +12,16 @@ uint8_t battery_voltage_to_percentage(float voltage)
     return (uint8_t)((voltage - 3.2) * 100 / (4.2 - 3.2));
 }
 
-int get_actual_forecast_data_index(struct tm *tm_info, int update_data_time)
+int get_actual_forecast_data_index(const int cur_hour, const int update_data_time)
 {
-    int forecast_hour = (tm_info->tm_hour + 1)%24;
     int time_dif;
     if(update_data_time < 0 
         || update_data_time > 23) return NO_DATA;
 
-    if( forecast_hour >= update_data_time){
-        time_dif = tm_info->tm_hour - update_data_time;
+    if( cur_hour >= update_data_time){
+        time_dif = cur_hour - update_data_time;
     } else {
-        time_dif = 24 + tm_info->tm_hour - update_data_time;
+        time_dif = 24 + cur_hour - update_data_time;
     }
     if(time_dif >= FORECAST_LIST_SIZE*3) return NO_DATA;
     return time_dif / 3;

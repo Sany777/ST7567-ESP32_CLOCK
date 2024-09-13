@@ -105,7 +105,7 @@ static void main_task(void *pv)
     long long sleep_time_ms;
     int timeout = TIMEOUT_BUT_INP;
     long long time_work = 0;
-    const struct tm * tinfo = get_time_tm();
+    const struct tm * tinfo = get_cur_time_tm();
     next_screen = SCREEN_MAIN;
     device_set_pin(PIN_LCD_BACKLIGHT_EN, 0);
     lcd_init();
@@ -228,6 +228,7 @@ static void main_task(void *pv)
         device_stop_timer();
         esp_light_sleep_start(); 
         if(esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER){
+            device_set_state(BIT_PERIOD_CMPLT);
             timeout = 1;
             if(!timer_run){
                 next_screen = SCREEN_MAIN;
@@ -245,19 +246,21 @@ static void service_task(void *pv)
 {
     uint32_t bits;
     bool open_sesion;
-    int esp_res, wait_client_timeout;
     int delay_update_forecast = DELAY_TRY_GET_DATA;
+    vTaskDelay(100/portTICK_PERIOD_MS);
+    int esp_res, wait_client_timeout;
+    bool fail_init_sntp = false;
+    struct tm * tinfo;
     for(;;){
-        device_wait_bits_untile(BIT_UPDATE_FORECAST_DATA|BIT_START_SERVER, 
+        bits = device_wait_bits_untile(BIT_UPDATE_FORECAST_DATA|BIT_START_SERVER, 
                             portMAX_DELAY);
 
-        bits = device_set_state(BIT_WAIT_PROCCESS);
         if(bits & BIT_START_SERVER){
             if(start_ap() == ESP_OK ){
                 bits = device_wait_bits(BIT_IS_AP_CONNECTION);
                 if(bits & BIT_IS_AP_CONNECTION && init_server(network_buf) == ESP_OK){
                     wait_client_timeout = 0;
-                    device_set_state(BIT_SERVER_RUN|BIT_NEW_DATA);
+                    device_set_state(BIT_SERVER_RUN);
                     open_sesion = false;
                     while(bits = device_get_state(), bits&BIT_SERVER_RUN){
                         if(open_sesion){
@@ -272,14 +275,16 @@ static void service_task(void *pv)
                         } else {
                             wait_client_timeout += DELAY_SERV;
                         }
+
                         vTaskDelay(DELAY_SERV/portTICK_PERIOD_MS);
                     }
                     deinit_server();
-                    device_commit_changes();
-                    vTaskDelay(1000/portTICK_PERIOD_MS);
-                    wifi_stop();
+                    bool changed_settings = device_commit_changes();
+                    if(changed_settings && ! (bits&BIT_FORECAST_OK) ){
+                        bits = device_set_state(BIT_UPDATE_FORECAST_DATA);
+                    }
                 }
-                device_set_state(BIT_NEW_DATA);
+                wifi_stop();
             }
             device_clear_state(BIT_START_SERVER);
         }
@@ -287,37 +292,44 @@ static void service_task(void *pv)
         if(bits&BIT_UPDATE_FORECAST_DATA){
             esp_res = connect_sta(device_get_ssid(),device_get_pwd());
             if(esp_res == ESP_OK){
-                if(! (bits&BIT_STA_CONF_OK)){
-                    device_set_state(BIT_STA_CONF_OK);
-                }
-                if(! (bits&BIT_IS_TIME) ){
+                device_set_state(BIT_STA_CONF_OK);
+                if(! (bits&BIT_IS_TIME)){
                     init_sntp();
                     device_wait_bits(BIT_IS_TIME);
                     stop_sntp();
                 }
-                esp_res = update_forecast(device_get_city_name(),device_get_api_key());
+                esp_res = update_forecast_data(device_get_city_name(),device_get_api_key());
             }
-            
             if(esp_res == ESP_OK){
+                tinfo = get_cur_time_tm();
+                if(fail_init_sntp || service_data.update_data_time > tinfo->tm_hour){
+                    esp_restart();
+                }
+                service_data.update_data_time = tinfo->tm_hour;
                 if(! (bits&BIT_FORECAST_OK)){
                     delay_update_forecast = DELAY_UPDATE_FORECAST;
                     create_periodic_task(update_forecast_handler, delay_update_forecast, FOREVER);
                     device_set_state(BIT_FORECAST_OK);
                 }
             } else {
-                if(bits&BIT_FORECAST_OK){
-                    device_clear_state(BIT_FORECAST_OK);
+
+                bits = device_clear_state(BIT_FORECAST_OK);
+
+                if(!fail_init_sntp && service_data.update_data_time == NO_DATA){
+                    fail_init_sntp = true;
                 }
-                if(delay_update_forecast < DELAY_UPDATE_FORECAST){
+                if(fail_init_sntp && delay_update_forecast < DELAY_UPDATE_FORECAST){
                     create_periodic_task(update_forecast_handler, delay_update_forecast, FOREVER);
-                    delay_update_forecast *= 2;
+                    if(bits&BIT_PERIOD_CMPLT){
+                        delay_update_forecast *= 2;
+                        device_clear_state(BIT_PERIOD_CMPLT);
+                    }
                 }
             }
+            wifi_stop();
             device_set_state(BIT_NEW_DATA);
             device_clear_state(BIT_UPDATE_FORECAST_DATA);
-            wifi_stop();
         }
-        device_clear_state(BIT_WAIT_PROCCESS);
     }
 }
 
@@ -469,6 +481,7 @@ static void setting_func(int cmd)
 
 static void main_func(int cmd)
 {
+    int ver_desc, data_indx;
 
     if(cmd == CMD_INC || cmd == CMD_DEC){
         next_screen +=  cmd == CMD_INC ? 1 : -1;
@@ -476,7 +489,6 @@ static void main_func(int cmd)
     }
 
     const unsigned bits = device_get_state();
-    int ver_desc;
 
     if(bits&BIT_IS_LOW_BAT){
         lcd_printf(1, 1, FONT_SIZE_9, COLORED, "%u%%", 
@@ -490,7 +502,7 @@ static void main_func(int cmd)
     
     print_temp_indoor();
 
-    int data_indx = get_actual_forecast_data_index(get_time_tm(), service_data.update_data_time);
+    data_indx = get_actual_forecast_data_index(get_cur_time_tm()->tm_hour, service_data.update_data_time);
 
     if(data_indx != NO_DATA){
         lcd_printf(70, 49, FONT_SIZE_9, COLORED, "%dC*", service_data.temp_list[data_indx]);
@@ -575,7 +587,7 @@ static void weather_info_func(int cmd)
         lcd_print_centered_str(40, FONT_SIZE_9, COLORED, " been updated yeat");
     } else {
 
-        data_indx = get_actual_forecast_data_index(get_time_tm(), dt);
+        data_indx = get_actual_forecast_data_index(get_cur_time_tm()->tm_hour, dt);
 
         if(data_indx == NO_DATA){
             lcd_print_centered_str(20, FONT_SIZE_9, COLORED, "Data has been updated");

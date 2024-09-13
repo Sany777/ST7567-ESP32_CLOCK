@@ -19,7 +19,7 @@ int get_time_sec(struct tm* tinfo)
     return tinfo->tm_hour*3600 + tinfo->tm_min*60 + tinfo->tm_sec;
 }
 
-struct tm* get_time_tm(void)
+struct tm* get_cur_time_tm(void)
 {
     time_t time_now;
     time(&time_now);
@@ -97,7 +97,7 @@ void stop_sntp()
 const char* snprintf_time(const char *format)
 {
     static char text_buf[100];
-    struct tm *timeinfo = get_time_tm();
+    struct tm *timeinfo = get_cur_time_tm();
     strftime(text_buf, sizeof(text_buf), format, timeinfo);
     return text_buf;
 }
