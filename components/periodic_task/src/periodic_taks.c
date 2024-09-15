@@ -8,7 +8,7 @@
 #include "device_common.h"
 #include "clock_module.h"
 #include "device_macro.h"
-
+#include <string.h>
 #define MAX_TASKS_NUM 20
 
 
@@ -22,8 +22,8 @@ typedef struct {
 static portMUX_TYPE critical_mux = portMUX_INITIALIZER_UNLOCKED;
 static esp_timer_handle_t periodic_timer = NULL;
 static SemaphoreHandle_t timer_semaphore;
-static long long time_val = 0, before_sleep = 0;
-static periodic_task_list_data_t periodic_task_list[MAX_TASKS_NUM] = {0};
+static long long time_val = 1, before_sleep = 0;
+static periodic_task_list_data_t periodic_task_list[MAX_TASKS_NUM] = { 0 };
 
 
 static periodic_task_list_data_t* find_task(periodic_task_list_data_t *list, 
@@ -143,8 +143,8 @@ int IRAM_ATTR create_periodic_task(periodic_func_t func,
 
 void device_stop_timer()
 {
-    before_sleep = esp_timer_get_time();
     if(esp_timer_is_active(periodic_timer)){
+        before_sleep = esp_timer_get_time();
         esp_timer_stop(periodic_timer);
     }
 }
@@ -168,11 +168,10 @@ int device_start_timer()
 {
     int res = ESP_FAIL;
     if(!esp_timer_is_active(periodic_timer)){
+        time_val = 1;
         if(before_sleep != 0){
-            time_val = esp_timer_get_time() - before_sleep + 1;
-        } else {
-            time_val = 1;
-        }
+            time_val += (esp_timer_get_time() - before_sleep) / 1000;
+        } 
         res = esp_timer_start_periodic(periodic_timer, 1000);
     }
     return res;

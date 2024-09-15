@@ -193,6 +193,8 @@ int device_get_offset()
 
 static int read_data()
 {
+    memset(&service_data, 0, sizeof(service_data));
+    memset(&main_data, 0, sizeof(main_data));
     service_data.update_data_time = NO_DATA;
     CHECK_AND_RET_ERR(read_flash(MAIN_DATA_NAME, (unsigned char *)&main_data, sizeof(main_data)));
     device_set_state(main_data.flags&STORED_FLAGS);
@@ -216,7 +218,7 @@ bool is_signale(const struct tm *tm_info)
     if( notif_num && notif_data
             && cur_min > FORBIDDED_NOTIF_HOUR){
         for(int i=0; i<cur_day-1; ++i){
-            // set data offset
+            // data offset
             notif_data += main_data.schema[i];
         }
         for(int i=0; i<notif_num; ++i){
