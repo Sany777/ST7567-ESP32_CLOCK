@@ -11,7 +11,6 @@
 #include "periodic_task.h"
 #include "toolbox.h"
 
-#define INTERVAL_8_HOUR   (1000*60*60*8)
 
 
 
@@ -24,44 +23,42 @@ struct tm* get_cur_time_tm(void)
 }
 
 
-void set_time_ms(long long time_ms)
+void set_time_sec(long long time_sec)
 {
-    int offet_sec = device_get_offset() * 60 * 60;
     struct timeval tv;
-    tv.tv_sec = time_ms/1000 + offet_sec;
-    tv.tv_usec = time_ms%1000;
+    tv.tv_sec = time_sec;
     settimeofday(&tv, NULL);
     device_set_state(BIT_IS_TIME);
 }
 
 void set_offset(int offset_hour)
 {
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    tv.tv_sec = tv.tv_sec + offset_hour*60*60;
-    settimeofday(&tv, NULL);
+    char tz[20]; 
+    snprintf(tz, sizeof(tz), "UTC%+d", -offset_hour);
+    setenv("TZ", tz, 1);
+    tzset();  
 }
 
 
-static void set_time_cb(struct timeval *tv)
-{
-    device_set_state(BIT_NEW_MIN|BIT_IS_TIME|BIT_SNTP_OK);
-}
+// static void set_time_cb(struct timeval *tv)
+// {
+//     device_set_state(BIT_NEW_MIN|BIT_IS_TIME|BIT_SNTP_OK);
+// }
 
 
-void init_sntp()
-{
-    esp_sntp_set_time_sync_notification_cb(set_time_cb);
-    esp_sntp_set_sync_mode(SNTP_SYNC_MODE_SMOOTH);
-    esp_sntp_setoperatingmode(ESP_SNTP_OPMODE_POLL);
-    esp_sntp_setservername(0, "0.ua.pool.ntp.org");
-    esp_sntp_setservername(1, "1.ua.pool.ntp.org");
-    esp_sntp_setservername(2, "2.ua.pool.ntp.org");
-    esp_sntp_setservername(3, "3.ua.pool.ntp.org");
-    esp_sntp_setservername(4, "pool.ntp.org");
-    esp_sntp_servermode_dhcp(1);
-    esp_sntp_init();
-}
+// void init_sntp()
+// {
+//     esp_sntp_set_time_sync_notification_cb(set_time_cb);
+//     esp_sntp_set_sync_mode(SNTP_SYNC_MODE_SMOOTH);
+//     esp_sntp_setoperatingmode(ESP_SNTP_OPMODE_POLL);
+//     esp_sntp_setservername(0, "0.ua.pool.ntp.org");
+//     esp_sntp_setservername(1, "1.ua.pool.ntp.org");
+//     esp_sntp_setservername(2, "2.ua.pool.ntp.org");
+//     esp_sntp_setservername(3, "3.ua.pool.ntp.org");
+//     esp_sntp_setservername(4, "pool.ntp.org");
+//     esp_sntp_servermode_dhcp(1);
+//     esp_sntp_init();
+// }
 
 
 

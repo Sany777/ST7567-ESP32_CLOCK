@@ -45,20 +45,18 @@ static void sta_handler(void* arg, esp_event_base_t event_base, int32_t event_id
     static int retry_num;
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
         retry_num = 0;
-        device_clear_state(BIT_IS_STA_CONNECTION);
         esp_wifi_connect();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         if(retry_num < 5){
             esp_wifi_connect();
             ++retry_num;
+        } else {
             wifi_event_sta_disconnected_t *event_sta_disconnected = (wifi_event_sta_disconnected_t *) event_data;
             if(event_sta_disconnected->reason == WIFI_REASON_NO_AP_FOUND
                         || event_sta_disconnected->reason == WIFI_REASON_HANDSHAKE_TIMEOUT){
                 device_set_state(BIT_ERR_SSID_NOT_FOUND);
-            } else {
-                device_clear_state(BIT_ERR_SSID_NOT_FOUND);
             }
-        } 
+        }
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         retry_num = 0;
         device_set_state(BIT_IS_STA_CONNECTION);
@@ -74,8 +72,6 @@ static void ap_handler(void* main_data, esp_event_base_t event_base,
         device_set_state(BIT_IS_AP_CLIENT);
     } else if(event_id == WIFI_EVENT_AP_STADISCONNECTED){
         device_clear_state(BIT_IS_AP_CLIENT);
-    } else if(event_id == WIFI_EVENT_AP_START){
-        device_set_state(BIT_IS_AP_CONNECTION);
     }
 }
 
@@ -132,9 +128,11 @@ int connect_sta(const char *ssid, const char *pwd)
 
     CHECK_AND_RET_ERR(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_sta_config));
     CHECK_AND_RET_ERR(esp_wifi_start());
+    device_clear_state(BIT_IS_STA_CONNECTION);
     vTaskDelay(1000/portTICK_PERIOD_MS);
     unsigned bits = device_wait_bits(BIT_IS_STA_CONNECTION);
     if(bits&BIT_IS_STA_CONNECTION){
+        vTaskDelay(500/portTICK_PERIOD_MS);
         return ESP_OK;
     }
     ESP_LOGE("", "err timeout sta");
@@ -170,7 +168,7 @@ int start_ap()
 
 void wifi_stop()
 {
-    device_clear_state(BIT_IS_AP_CLIENT|BIT_IS_AP_CONNECTION|BIT_IS_STA_CONNECTION);
+    device_clear_state(BIT_IS_AP_CLIENT|BIT_IS_STA_CONNECTION);
     if (wifi_mode == WIFI_MODE_AP){
         esp_wifi_stop();
         vTaskDelay(100/portTICK_PERIOD_MS);

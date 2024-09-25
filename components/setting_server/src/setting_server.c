@@ -39,13 +39,6 @@ void server_stop()
     device_clear_state(BIT_SERVER_RUN);
 }
 
-static esp_err_t index_redirect_handler(httpd_req_t *req)
-{
-    httpd_resp_set_status(req, "307 Temporary Redirect");
-    httpd_resp_set_hdr(req, "Location", "/index.html");
-    httpd_resp_send(req, NULL, 0);
-    return ESP_OK;
-}
 
 static esp_err_t get_index_handler(httpd_req_t *req)
 {
@@ -183,7 +176,7 @@ static esp_err_t handler_get_info(httpd_req_t *req)
 
 static esp_err_t handler_set_time(httpd_req_t *req)
 {
-    long long time;
+    long long time_sec;
     int received;
     const int total_len = req->content_len;
     char * server_buf = (char *)req->user_ctx;
@@ -195,8 +188,8 @@ static esp_err_t handler_set_time(httpd_req_t *req)
         SEND_REQ_ERR(req, MES_DATA_NOT_READ, fail);
     }
     server_buf[total_len] = 0;
-    time = atoll(server_buf);
-    set_time_ms(time);
+    time_sec = (atoll(server_buf) / 1000) + device_get_offset() * 3600;
+    set_time_sec(time_sec);
     httpd_resp_sendstr(req, MES_SUCCESSFUL);
     return ESP_OK;
 fail:
@@ -418,7 +411,7 @@ int init_server(char *server_buf)
 {
     if(server != NULL) return ESP_FAIL;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.max_uri_handlers = 14;
+    config.max_uri_handlers = 13;
     config.uri_match_fn = httpd_uri_match_wildcard;
 
     if(httpd_start(&server, &config) != ESP_OK){
@@ -481,13 +474,6 @@ int init_server(char *server_buf)
     };
     httpd_register_uri_handler(server, &time_uri);
 
-     httpd_uri_t index_uri = {
-        .uri      = "/index.html",
-        .method   = HTTP_GET,
-        .handler  = get_index_handler ,
-        .user_ctx = server_buf
-    };
-    httpd_register_uri_handler(server, &index_uri);
 
      httpd_uri_t get_style = {
         .uri      = "/style.css",
@@ -513,14 +499,6 @@ int init_server(char *server_buf)
     };
     httpd_register_uri_handler(server, &notif_uri);
 
-     httpd_uri_t redir_uri = {
-        .uri      = "/*",
-        .method   = HTTP_GET,
-        .handler  = index_redirect_handler,
-        .user_ctx = server_buf
-    };
-    httpd_register_uri_handler(server, &redir_uri);
-
     httpd_uri_t set_offset_uri = {
         .uri      = "/Offset",
         .method   = HTTP_POST,
@@ -536,6 +514,14 @@ int init_server(char *server_buf)
         .user_ctx = server_buf
     };
     httpd_register_uri_handler(server, &set_loud_uri);
+
+    httpd_uri_t redir_uri = {
+        .uri      = "/*",
+        .method   = HTTP_GET,
+        .handler  = get_index_handler,
+        .user_ctx = server_buf
+    };
+    httpd_register_uri_handler(server, &redir_uri);
 
     return ESP_OK;
 }

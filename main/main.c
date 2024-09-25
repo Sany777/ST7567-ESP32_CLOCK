@@ -12,9 +12,8 @@
 
 void app_main(void)
 {
-    device_init();
     device_init_timer();
-    device_start_timer();
+    device_init();
     adc_reader_init();
     vTaskDelay(100/portTICK_PERIOD_MS);
     task_init();

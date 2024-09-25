@@ -25,12 +25,12 @@ enum BasicConst{
 enum Bits{
     BIT_NOTIF_ENABLE            = (1<<0),
     BIT_FORECAST_OK             = (1<<1),
-    BIT_SNTP_OK                 = (1<<2),
+    BIT_IS_TIME                 = (1<<2),
     BIT_STA_CONF_OK             = (1<<3),
     BIT_ENCODER_ROTATE          = (1<<4),
-    BIT_IS_AP_CONNECTION        = (1<<5),
+    BIT_UPDATE_TIME             = (1<<5),
     BIT_IS_STA_CONNECTION       = (1<<6),
-    BIT_IS_TIME                 = (1<<7),
+
     BIT_SERVER_RUN              = (1<<8),
     BIT_IS_AP_CLIENT            = (1<<9),
     BIT_NEW_T_MIN               = (1<<10),
@@ -46,6 +46,7 @@ enum Bits{
     BIT_NEW_MIN                 = (1<<21),
     BIT_CHECK_BAT               = (1<<22),
     BIT_FORCE_UPDATE_FORECAST_DATA    = (1<<23),
+    
     STORED_FLAGS                = (BIT_NOTIF_ENABLE),
     BITS_DENIED_SLEEP           = (BIT_WAIT_BUT_INPUT|BIT_UPDATE_FORECAST_DATA|BIT_START_SERVER),
     BITS_NEW_BUT_DATA           = (BIT_BUT_PRESSED|BIT_BUT_LONG_PRESSED|BIT_ENCODER_ROTATE)

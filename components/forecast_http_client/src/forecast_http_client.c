@@ -111,7 +111,42 @@ static void split(char *data_buf, size_t data_size, const char *split_chars_str)
         ++ptr;
     }
 }
-#include "esp_log.h"
+
+
+int device_update_time()
+{
+    char ** unixtime = NULL;
+    esp_http_client_config_t config = {
+        .url = "http://worldtimeapi.org/api/timezone/Etc/UTC",  
+        .event_handler = http_event_handler,
+        .user_data = (void*)network_buf,    
+        .method = HTTP_METHOD_GET,
+        .buffer_size = NET_BUF_LEN,
+        .auth_type = HTTP_AUTH_TYPE_NONE,
+        .skip_cert_common_name_check = true                  
+    };
+
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+    esp_err_t err = esp_http_client_perform(client);
+    if(err == ESP_OK){
+        const size_t data_size = esp_http_client_get_content_length(client);
+        if(data_size){
+            network_buf[data_size] = 0;
+            get_value_ptrs(&unixtime, network_buf, data_size, "\"unixtime\":");
+            if(unixtime){
+                split(unixtime[0], data_size, ",");
+                struct timeval tv = {
+                    .tv_sec = atol(unixtime[0]) 
+                };
+                settimeofday(&tv, NULL);
+                free(unixtime);
+                unixtime = NULL;
+            }
+        }
+    }
+    esp_http_client_cleanup(client);
+    return err;
+}
 
 int update_forecast_data(const char *city, const char *api_key)
 {

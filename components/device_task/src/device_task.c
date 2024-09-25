@@ -43,7 +43,8 @@ enum TimeoutMS{
     TIMEOUT_HOUR            = 60*TIMEOUT_MINUTE,
     DELAY_TRY_GET_DATA      = 2*TIMEOUT_MINUTE,
     DELAY_UPDATE_FORECAST   = 32*TIMEOUT_MINUTE,
-    INTERVAL_CHECK_BAT      = 10*TIMEOUT_MINUTE,
+    INTERVAL_CHECK_BAT      = TIMEOUT_HOUR,
+    INTERVAL_UPDATE_TIME    = 8*TIMEOUT_HOUR
 };
 
 enum TaskDelay{
@@ -93,6 +94,8 @@ static long long start_task_time;
 static void update_forecast_handler();
 static void timer_counter_handler();
 static void check_bat_status_handler();
+static void update_time_handler();
+
 
 
 
@@ -104,12 +107,14 @@ static void main_task(void *pv)
     long long sleep_time_ms;
     int timeout = TIMEOUT_BUT_INP;
     unsigned time_work = 0;
+    set_offset(device_get_offset());
     const struct tm * tinfo = get_cur_time_tm();
     next_screen = SCREEN_MAIN;
     device_set_pin(PIN_LCD_BACKLIGHT_EN, 0);
     lcd_init();
-    device_set_state(BIT_UPDATE_FORECAST_DATA|BIT_CHECK_BAT);
+    device_set_state(BIT_UPDATE_FORECAST_DATA|BIT_CHECK_BAT|BIT_UPDATE_TIME);
     create_periodic_task(check_bat_status_handler, INTERVAL_CHECK_BAT, FOREVER);
+    create_periodic_task(update_time_handler, INTERVAL_UPDATE_TIME, FOREVER);
     bool backlight_en = false, task_run;
     int volt_err_count = 0;
     for(;;){
@@ -242,6 +247,7 @@ static void main_task(void *pv)
         esp_light_sleep_start(); 
         if(esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER){
             timeout = 1;
+            device_set_state(BIT_NEW_MIN);
             if(!timer_run){
                 next_screen = SCREEN_MAIN;
             }
@@ -269,8 +275,8 @@ static void service_task(void *pv)
 
         if(bits & BIT_START_SERVER){
             if(start_ap() == ESP_OK ){
-                bits = device_wait_bits(BIT_IS_AP_CONNECTION);
-                if(bits & BIT_IS_AP_CONNECTION && init_server(network_buf) == ESP_OK){
+                vTaskDelay(1500/portTICK_PERIOD_MS);
+                if(init_server(network_buf) == ESP_OK){
                     wait_client_timeout = 0;
                     device_set_state(BIT_SERVER_RUN);
                     open_sesion = false;
@@ -306,20 +312,19 @@ static void service_task(void *pv)
             esp_res = connect_sta(device_get_ssid(),device_get_pwd());
             if(esp_res == ESP_OK){
                 device_set_state(BIT_STA_CONF_OK);
-                if(! (bits&BIT_IS_TIME)){
-                    init_sntp();
-                    device_wait_bits(BIT_IS_TIME);
-                    stop_sntp();
-                    set_offset(device_get_offset());
+                if(bits&BIT_UPDATE_TIME || !(bits&BIT_IS_TIME)){
+                    esp_res = device_update_time();
+                    device_clear_state(BIT_UPDATE_TIME|BIT_IS_TIME);  
+                    if(esp_res == ESP_OK){
+                        device_set_state(BIT_IS_TIME);
+                    }
                 }
-                esp_res = update_forecast_data(device_get_city_name(),device_get_api_key());
+                if(esp_res == ESP_OK){
+                    esp_res = update_forecast_data(device_get_city_name(),device_get_api_key());
+                }
             }
             if(esp_res == ESP_OK){
-                tinfo = get_cur_time_tm();
-                if(fail_init_sntp || service_data.update_data_time > tinfo->tm_hour){
-                    esp_restart();
-                }
-                service_data.update_data_time = tinfo->tm_hour;
+                service_data.update_data_time = get_cur_time_tm()->tm_hour;
                 if(! (bits&BIT_FORECAST_OK)){
                     delay_update_forecast = DELAY_UPDATE_FORECAST;
                     device_set_state(BIT_FORECAST_OK);
@@ -329,9 +334,6 @@ static void service_task(void *pv)
 
                 device_clear_state(BIT_FORECAST_OK);
 
-                if(!fail_init_sntp && service_data.update_data_time == NO_DATA){
-                    fail_init_sntp = true;
-                }
                 if(bits&BIT_UPDATE_FORECAST_DATA){
                     create_periodic_task(update_forecast_handler, delay_update_forecast, FOREVER);
                     if(delay_update_forecast < DELAY_UPDATE_FORECAST){
@@ -560,15 +562,15 @@ static void device_info_func(int cmd)
     }
     if(bits&BIT_IS_AP_CLIENT){
         lcd_print_str(2, 30, FONT_SIZE_9, COLORED, "AP:is a client");
-    }else if(bits&BIT_IS_AP_CONNECTION){
-        lcd_print_str(2, 30, FONT_SIZE_9, COLORED, "AP:enable");
+    }else if(bits&BIT_IS_AP_CLIENT){
+        lcd_print_str(2, 30, FONT_SIZE_9, COLORED, "AP client");
     } else {
-        lcd_print_str(2, 30, FONT_SIZE_9, COLORED, "AP:disable");
+        lcd_print_str(2, 30, FONT_SIZE_9, COLORED, "no AP client");
     }
-    if(bits&BIT_SNTP_OK){
-        lcd_print_str(2, 40, FONT_SIZE_9, COLORED, "SNTP:Ok");
+    if(bits&BIT_IS_TIME){
+        lcd_print_str(2, 40, FONT_SIZE_9, COLORED, "Time:Ok");
     } else {
-        lcd_print_str(2, 40, FONT_SIZE_9, UNCOLORED, "SNTP:NOk");
+        lcd_print_str(2, 40, FONT_SIZE_9, UNCOLORED, "Time:NOk");
     }
     if(bits&BIT_FORECAST_OK){
         lcd_print_str(2, 50, FONT_SIZE_9, COLORED, "Openweath.:Ok");
@@ -653,5 +655,9 @@ static void check_bat_status_handler()
     device_set_state_isr(BIT_CHECK_BAT);
 }
 
+static void update_time_handler()
+{
+    device_set_state_isr(BIT_UPDATE_TIME);
+}
 
 

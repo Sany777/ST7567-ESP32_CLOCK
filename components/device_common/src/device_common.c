@@ -28,7 +28,7 @@ static settings_data_t main_data = {0};
 service_data_t service_data = {0};
 char network_buf[NET_BUF_LEN];
 
-static EventGroupHandle_t clock_event_group;
+static EventGroupHandle_t clock_event_group = NULL;
 static const char *MAIN_DATA_NAME = "main_data";
 static const char *NOTIFY_DATA_NAME = "notify_data";
 
@@ -234,6 +234,7 @@ bool is_signale(const struct tm *tm_info)
 void device_init()
 {
     clock_event_group = xEventGroupCreate();
+    
     device_gpio_init();
     read_data();
     I2C_init();
