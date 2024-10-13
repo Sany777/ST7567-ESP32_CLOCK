@@ -92,9 +92,11 @@ int connect_sta(const char *ssid, const char *pwd)
     const size_t ssid_len = strnlen(ssid, sizeof(wifi_sta_config.sta.ssid));
     const size_t pwd_len = strnlen(pwd, sizeof(wifi_sta_config.sta.password));
     if( pwd_len < MIN_WIFI_PWD_LEN){
+        ESP_LOGE("", "password is not configure");
         return ESP_ERR_WIFI_PASSWORD;
     }
     if(ssid_len == 0 || ssid_len == sizeof(wifi_sta_config.sta.ssid)){
+        ESP_LOGE("", "ssid is not configure");
         return ESP_ERR_WIFI_SSID;
     }
     memset(&wifi_sta_config, 0, sizeof(wifi_sta_config));
@@ -132,7 +134,7 @@ int connect_sta(const char *ssid, const char *pwd)
     vTaskDelay(1000/portTICK_PERIOD_MS);
     unsigned bits = device_wait_bits(BIT_IS_STA_CONNECTION);
     if(bits&BIT_IS_STA_CONNECTION){
-        vTaskDelay(500/portTICK_PERIOD_MS);
+        vTaskDelay(1000/portTICK_PERIOD_MS);
         return ESP_OK;
     }
     ESP_LOGE("", "err timeout sta");

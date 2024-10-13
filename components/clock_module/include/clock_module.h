@@ -9,7 +9,7 @@ extern "C" {
 
 #include <sys/time.h>
 
-
+void init_sntp();
 struct tm* get_cur_time_tm(void);
 const char* snprintf_time(const char *format);
 void set_time_sec(long long time_sec);

@@ -28,7 +28,7 @@ static settings_data_t main_data = {0};
 service_data_t service_data = {0};
 char network_buf[NET_BUF_LEN];
 
-static EventGroupHandle_t clock_event_group = NULL;
+static EventGroupHandle_t clock_event_group = NULL, event_group = NULL;
 static const char *MAIN_DATA_NAME = "main_data";
 static const char *NOTIFY_DATA_NAME = "notify_data";
 
@@ -128,34 +128,58 @@ int device_commit_changes()
 
 unsigned device_get_state()
 {
-    return xEventGroupGetBits(clock_event_group);
+    EventBits_t bits = xEventGroupGetBits(clock_event_group);
+    bits |= xEventGroupGetBits(event_group)<<EVENT_BIT_SHIFT;
+    return  bits;
 } 
 
 unsigned  device_set_state(unsigned bits)
 {
+    EventBits_t bits_return = 0;
+    EventBits_t lbits = bits&BIT_MASK;
+    EventBits_t hbits = bits >> EVENT_BIT_SHIFT;
     if(bits&STORED_FLAGS){
         main_data.flags |= bits;
         changes_main_data = true;
     }
-    return xEventGroupSetBits(clock_event_group, (EventBits_t) (bits));
+    if(lbits){
+        bits_return = xEventGroupSetBits(clock_event_group, (EventBits_t) lbits);
+    }
+    if(hbits){
+        bits_return |= xEventGroupSetBits(event_group, (EventBits_t) hbits);
+    }
+    return bits_return;
 }
 
 unsigned  device_clear_state(unsigned bits)
 {
+    EventBits_t bits_return = 0;
+    EventBits_t lbits = bits&BIT_MASK;
+    EventBits_t hbits = bits >> EVENT_BIT_SHIFT;
     if(bits&STORED_FLAGS){
         main_data.flags &= ~bits;
         changes_main_data = true;
     }
-    return xEventGroupClearBits(clock_event_group, (EventBits_t) (bits));
+    if(lbits){
+        bits_return = xEventGroupClearBits(clock_event_group, (EventBits_t) lbits);
+    }
+    if(hbits){
+        bits_return |= xEventGroupClearBits(event_group, (EventBits_t) hbits);
+    }
+    return bits_return;
 }
 
 unsigned device_wait_bits_untile(unsigned bits, unsigned time_ticks)
 {
-    return xEventGroupWaitBits(clock_event_group,
-                                (EventBits_t) (bits),
+    EventBits_t bits_return = 0;
+    EventBits_t lbits = bits&BIT_MASK;
+    if(lbits){
+        bits_return = xEventGroupWaitBits(clock_event_group, (EventBits_t) (lbits),
                                 pdFALSE,
                                 pdFALSE,
                                 time_ticks);
+    }
+    return bits_return;
 }
 
 
@@ -234,7 +258,9 @@ bool is_signale(const struct tm *tm_info)
 void device_init()
 {
     clock_event_group = xEventGroupCreate();
-    
+    event_group = xEventGroupCreate();
+    assert(clock_event_group);
+    assert(event_group);
     device_gpio_init();
     read_data();
     I2C_init();
@@ -245,11 +271,34 @@ void device_init()
 void device_set_state_isr(unsigned bits)
 {
     BaseType_t pxHigherPriorityTaskWoken;
-    xEventGroupSetBitsFromISR(clock_event_group, (EventBits_t)bits, &pxHigherPriorityTaskWoken);
-    portYIELD_FROM_ISR( pxHigherPriorityTaskWoken );
+    EventBits_t lbits = bits&BIT_MASK;
+    EventBits_t hbits = bits >> EVENT_BIT_SHIFT;
+    if(bits&STORED_FLAGS){
+        main_data.flags |= bits;
+        changes_main_data = true;
+    }
+    if(lbits){
+        xEventGroupSetBitsFromISR(clock_event_group, (EventBits_t) lbits, &pxHigherPriorityTaskWoken);
+        portYIELD_FROM_ISR( pxHigherPriorityTaskWoken );
+    }
+    if(hbits){
+        xEventGroupSetBitsFromISR(event_group, (EventBits_t) hbits, &pxHigherPriorityTaskWoken);
+        portYIELD_FROM_ISR( pxHigherPriorityTaskWoken );
+    }
 }
 
 void  device_clear_state_isr(unsigned bits)
 {
-    xEventGroupClearBitsFromISR(clock_event_group, (EventBits_t)bits);
+    EventBits_t lbits = bits&BIT_MASK;
+    EventBits_t hbits = bits >> EVENT_BIT_SHIFT;
+    if(bits&STORED_FLAGS){
+        main_data.flags &= ~bits;
+        changes_main_data = true;
+    }
+    if(lbits){
+        xEventGroupClearBitsFromISR(clock_event_group, lbits);
+    }
+    if(hbits){
+        xEventGroupClearBitsFromISR(event_group, hbits);
+    }
 }

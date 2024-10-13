@@ -53,7 +53,7 @@ static void IRAM_ATTR encoder_handler(void* arg)
             } else {           
                 encoder_value--;
             }
-            device_set_state_isr(BIT_ENCODER_ROTATE);
+            device_set_state_isr(BIT_EVENT_ENCODER_ROTATE);
             enc_counter = 0;
         }
     }
@@ -78,14 +78,14 @@ static void check_but_state_handler()
         if(but_count < 5){
             but_count += 1;
         } else {
-            device_set_state_isr(BIT_BUT_LONG_PRESSED);
+            device_set_state_isr(BIT_EVENT_BUT_LONG_PRESSED);
             remove_task_isr(check_but_state_handler);
             but_count = 0;
         }
     } else if(but_count){
         but_count -= 1;
     } else {
-        device_set_state_isr(BIT_BUT_PRESSED);
+        device_set_state_isr(BIT_EVENT_BUT_PRESSED);
         remove_task_isr(check_but_state_handler);
     }
 }

@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 
-#define MESUR_NUM 1
+#define MEAS_NUM 20
 
 
 

@@ -112,11 +112,12 @@ static void main_task(void *pv)
     next_screen = SCREEN_MAIN;
     device_set_pin(PIN_LCD_BACKLIGHT_EN, 0);
     lcd_init();
-    device_set_state(BIT_UPDATE_FORECAST_DATA|BIT_CHECK_BAT|BIT_UPDATE_TIME);
+    device_set_state(BIT_UPDATE_FORECAST_DATA|BIT_CHECK_BAT);
     create_periodic_task(check_bat_status_handler, INTERVAL_CHECK_BAT, FOREVER);
     create_periodic_task(update_time_handler, INTERVAL_UPDATE_TIME, FOREVER);
     bool backlight_en = false, task_run;
     int volt_err_count = 0;
+
     for(;;){
 
         task_run = true;
@@ -134,11 +135,11 @@ static void main_task(void *pv)
             
             bits = device_get_state();
 
-            if(bits&BIT_BUT_LONG_PRESSED){
+            if(bits&BIT_EVENT_BUT_LONG_PRESSED){
                 start_single_signale(120, 2000);
                 backlight_en = !backlight_en;
                 device_set_pin(PIN_LCD_BACKLIGHT_EN, backlight_en);
-                device_clear_state(BIT_BUT_LONG_PRESSED);
+                device_clear_state(BIT_EVENT_BUT_LONG_PRESSED);
             } 
             if(screen != next_screen) {
                 if(next_screen >= SCREEN_LIST_SIZE){
@@ -148,23 +149,23 @@ static void main_task(void *pv)
                 }
                 screen = next_screen;
                 cmd = CMD_INIT;
-            } else if(bits&BIT_ENCODER_ROTATE){
+            } else if(bits&BIT_EVENT_ENCODER_ROTATE){
                 start_single_signale(75, 2500);
                 if(get_encoder_val() > 0){
                     cmd = CMD_INC;
                 } else {
                     cmd = CMD_DEC;
                 }
-                device_clear_state(BIT_ENCODER_ROTATE);
-            } else if(bits&BIT_BUT_PRESSED){
+                device_clear_state(BIT_EVENT_ENCODER_ROTATE);
+            } else if(bits&BIT_EVENT_BUT_PRESSED){
                 start_single_signale(50, 2000);
                 cmd = CMD_PRESS;
-                device_clear_state(BIT_BUT_PRESSED);
-            } else if(bits&BIT_NEW_DATA) {
+                device_clear_state(BIT_EVENT_BUT_PRESSED);
+            } else if(bits&BIT_EVENT_NEW_DATA) {
                 cmd = CMD_UPDATE_DATA;
-                device_clear_state(BIT_NEW_DATA);
+                device_clear_state(BIT_EVENT_NEW_DATA);
                 cmd = CMD_UPDATE_DATA; 
-            } else if(bits&BIT_NEW_MIN) {
+            } else if(bits&BIT_EVENT_NEW_MIN) {
                 if(screen == SCREEN_MAIN){
                     start_task_time = esp_timer_get_time();
                     if(bits&BIT_IS_TIME 
@@ -174,17 +175,17 @@ static void main_task(void *pv)
                     }
                 }
                 cmd = CMD_UPDATE_DATA;
-                device_clear_state(BIT_NEW_MIN);
-            } else if(bits&BIT_NEW_T_MIN) {
+                device_clear_state(BIT_EVENT_NEW_MIN);
+            } else if(bits&BIT_EVENT_NEW_T_MIN) {
                 if(screen == SCREEN_TIMER){
                     cmd = CMD_UPDATE_TIME;
                 }
-                device_clear_state(BIT_NEW_T_MIN);
+                device_clear_state(BIT_EVENT_NEW_T_MIN);
             } else if(bits&BIT_CHECK_BAT) {
                 volt_val = device_get_voltage();
                 if(volt_val > 2.8){
                     if(volt_val < 3.4){
-                        if(volt_val < 3.2){
+                        if(volt_val < MIN_VOLTAGE){
                             if(volt_err_count < 20){
                                 volt_err_count += 1;
                             } else {
@@ -197,10 +198,10 @@ static void main_task(void *pv)
                         } else {
                             volt_err_count = 0;
                         }
-                        device_set_state(BIT_IS_LOW_BAT);
+                        device_set_state(BIT_EVENT_IS_LOW_BAT);
                         cmd = CMD_UPDATE_DATA;
-                    } else if(bits&BIT_IS_LOW_BAT){
-                        device_clear_state(BIT_IS_LOW_BAT);
+                    } else if(bits&BIT_EVENT_IS_LOW_BAT){
+                        device_clear_state(BIT_EVENT_IS_LOW_BAT);
                         cmd = CMD_UPDATE_DATA;
                         volt_err_count = 0;
                     }
@@ -228,7 +229,7 @@ static void main_task(void *pv)
             } 
         }while(task_run);
 
-        if(bits&BIT_IS_LOW_BAT){
+        if(bits&BIT_EVENT_IS_LOW_BAT){
             start_signale_series(100, 10, 2000);
             vTaskDelay(2000/portTICK_PERIOD_MS);
         }
@@ -247,7 +248,7 @@ static void main_task(void *pv)
         esp_light_sleep_start(); 
         if(esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER){
             timeout = 1;
-            device_set_state(BIT_NEW_MIN);
+            device_set_state(BIT_EVENT_NEW_MIN);
             if(!timer_run){
                 next_screen = SCREEN_MAIN;
             }
@@ -274,13 +275,13 @@ static void service_task(void *pv)
                             portMAX_DELAY);
 
         if(bits & BIT_START_SERVER){
-            if(start_ap() == ESP_OK ){
+            if(start_ap() == ESP_OK){
                 vTaskDelay(1500/portTICK_PERIOD_MS);
                 if(init_server(network_buf) == ESP_OK){
                     wait_client_timeout = 0;
                     device_set_state(BIT_SERVER_RUN);
                     open_sesion = false;
-                    device_set_state(BIT_NEW_DATA);
+                    device_set_state(BIT_EVENT_NEW_DATA);
                     while(bits = device_get_state(), bits&BIT_SERVER_RUN){
                         if(open_sesion){
                             if(!(bits&BIT_IS_AP_CLIENT) ){
@@ -314,9 +315,17 @@ static void service_task(void *pv)
                 device_set_state(BIT_STA_CONF_OK);
                 if(bits&BIT_UPDATE_TIME || !(bits&BIT_IS_TIME)){
                     esp_res = device_update_time();
-                    device_clear_state(BIT_UPDATE_TIME|BIT_IS_TIME);  
+                    if(esp_res != ESP_OK){
+                        init_sntp();
+                        bits = device_wait_bits(BIT_IS_TIME);
+                        if(bits&BIT_IS_TIME)
+                            esp_res = ESP_OK;
+                    }
                     if(esp_res == ESP_OK){
                         device_set_state(BIT_IS_TIME);
+                        device_clear_state(BIT_UPDATE_TIME);  
+                    } else if(bits&BIT_IS_TIME){
+                        device_clear_state(BIT_UPDATE_TIME|BIT_IS_TIME);
                     }
                 }
                 if(esp_res == ESP_OK){
@@ -342,7 +351,8 @@ static void service_task(void *pv)
                 }
             }
             wifi_stop();
-            device_set_state(BIT_NEW_DATA);
+            device_set_state(BIT_EVENT_NEW_DATA);
+            vTaskDelay(1000/portTICK_PERIOD_MS);
             device_clear_state(BIT_UPDATE_FORECAST_DATA|BIT_FORCE_UPDATE_FORECAST_DATA);
         }
     }
@@ -438,7 +448,7 @@ static void timer_func(int cmd)
                 do{
                     vTaskDelay(100/portTICK_PERIOD_MS);
                 }while(get_but_state());
-                device_clear_state(BIT_BUT_PRESSED|BIT_BUT_LONG_PRESSED);
+                device_clear_state(BIT_EVENT_BUT_PRESSED|BIT_EVENT_BUT_LONG_PRESSED);
                 next_screen = SCREEN_MAIN;
                 return;
             }
@@ -505,7 +515,7 @@ static void main_func(int cmd)
 
     const unsigned bits = device_get_state();
 
-    if(bits&BIT_IS_LOW_BAT){
+    if(bits&BIT_EVENT_IS_LOW_BAT){
         lcd_printf(1, 1, FONT_SIZE_9, COLORED, "%u%%", 
             battery_voltage_to_percentage(volt_val));
         lcd_draw_rectangle(0, 0, 32, 10, COLORED);
@@ -540,9 +550,6 @@ static void device_info_func(int cmd)
     
     const unsigned bits = device_get_state();
     float voltage = device_get_voltage();
-    if(voltage < 3.0){
-        voltage = volt_val;
-    }
     lcd_printf_centered(3, FONT_SIZE_9, COLORED, "Bat:%u%%, %.2fV", 
                         battery_voltage_to_percentage(voltage), 
                         voltage);
@@ -647,7 +654,7 @@ static void timer_counter_handler()
     } else {
         remove_task_isr(timer_counter_handler);
     }
-    device_set_state_isr(BIT_NEW_T_MIN); 
+    device_set_state_isr(BIT_EVENT_NEW_T_MIN); 
 }
 
 static void check_bat_status_handler()

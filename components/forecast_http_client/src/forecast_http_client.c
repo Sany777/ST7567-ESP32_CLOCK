@@ -37,35 +37,35 @@ static size_t get_value_ptrs(char ***value_list, char *data_buf, const size_t bu
     return value_list_size;
 }
 
+static int data_size;      
+
 static esp_err_t http_event_handler(esp_http_client_event_t *evt)
 {
-    static char *output_buffer; 
-    static int output_len;      
+    static char *output_buffer = NULL; 
     switch(evt->event_id) {
     case HTTP_EVENT_ON_DATA:
     {
         if(!esp_http_client_is_chunked_response(evt->client)){
             int copy_len = 0;
             if(evt->user_data){
-                copy_len = MIN(evt->data_len, (NET_BUF_LEN - output_len));
+                copy_len = MIN(evt->data_len, (NET_BUF_LEN - data_size));
                 if (copy_len) {
-                    memcpy(evt->user_data + output_len, evt->data, copy_len);
+                    memcpy(evt->user_data + data_size, evt->data, copy_len);
                 }
             } else {
                 const int buffer_len = esp_http_client_get_content_length(evt->client);
                 if (output_buffer == NULL) {
                     output_buffer = (char *) malloc(buffer_len);
-                    output_len = 0;
                     if (output_buffer == NULL) {
                         return ESP_FAIL;
                     }
                 }
-                copy_len = MIN(evt->data_len, (buffer_len - output_len));
+                copy_len = MIN(evt->data_len, (buffer_len - data_size));
                 if (copy_len) {
-                    memcpy(output_buffer + output_len, evt->data, copy_len);
+                    memcpy(output_buffer + data_size, evt->data, copy_len);
                 }
             }
-            output_len += copy_len;
+            data_size += copy_len;
         }
         break;
     }
@@ -75,7 +75,6 @@ static esp_err_t http_event_handler(esp_http_client_event_t *evt)
             free(output_buffer);
             output_buffer = NULL;
         }
-        output_len = 0;
         break;
     }
     case HTTP_EVENT_DISCONNECTED:
@@ -84,7 +83,6 @@ static esp_err_t http_event_handler(esp_http_client_event_t *evt)
             free(output_buffer);
             output_buffer = NULL;
         }
-        output_len = 0;
         break;
     }
     default:break;
@@ -94,7 +92,7 @@ static esp_err_t http_event_handler(esp_http_client_event_t *evt)
 
 
 
-static void split(char *data_buf, size_t data_size, const char *split_chars_str)
+static void split(char *data_buf, const char *split_chars_str)
 {
     char *ptr = data_buf;
     const char *end_data_buf = data_buf + data_size;
@@ -115,7 +113,8 @@ static void split(char *data_buf, size_t data_size, const char *split_chars_str)
 
 int device_update_time()
 {
-    char ** unixtime = NULL;
+    data_size = 0;
+    char ** dateTime = NULL;
     esp_http_client_config_t config = {
         .url = "http://worldtimeapi.org/api/timezone/Etc/UTC",  
         .event_handler = http_event_handler,
@@ -128,20 +127,25 @@ int device_update_time()
 
     esp_http_client_handle_t client = esp_http_client_init(&config);
     esp_err_t err = esp_http_client_perform(client);
-    if(err == ESP_OK){
-        const size_t data_size = esp_http_client_get_content_length(client);
-        if(data_size){
-            network_buf[data_size] = 0;
-            get_value_ptrs(&unixtime, network_buf, data_size, "\"unixtime\":");
-            if(unixtime){
-                split(unixtime[0], data_size, ",");
-                struct timeval tv = {
-                    .tv_sec = atol(unixtime[0]) 
-                };
-                settimeofday(&tv, NULL);
-                free(unixtime);
-                unixtime = NULL;
-            }
+    if(err == ESP_OK && data_size){
+        network_buf[data_size] = '\0';
+        get_value_ptrs(&dateTime, network_buf, data_size, "\"dateTime\":");
+        if(dateTime){
+            struct tm tinfo;
+            sscanf(dateTime[0],"%d-%d-%dT%d:%d:%d", 
+                    &tinfo.tm_yday, 
+                    &tinfo.tm_mon, 
+                    &tinfo.tm_mday, 
+                    &tinfo.tm_hour, 
+                    &tinfo.tm_min, 
+                    &tinfo.tm_sec);
+
+            time_t epoch_time = mktime(&tinfo);
+
+            struct timeval now = { .tv_sec = epoch_time };
+            settimeofday(&now, NULL);
+            free(dateTime);
+            dateTime = NULL;
         }
     }
     esp_http_client_cleanup(client);
@@ -150,6 +154,7 @@ int device_update_time()
 
 int update_forecast_data(const char *city, const char *api_key)
 {
+    data_size = 0;
     int res = ESP_FAIL;
     char **feels_like_list = NULL, **description_list = NULL, **pop_list = NULL, **dt_list = NULL; 
 
@@ -171,7 +176,6 @@ int update_forecast_data(const char *city, const char *api_key)
     };
     esp_http_client_handle_t client = esp_http_client_init(&config);
     esp_http_client_perform(client);
-    const size_t data_size = esp_http_client_get_content_length(client);
     if(data_size){
         network_buf[data_size] = 0;
         const size_t pop_num = get_value_ptrs(&pop_list, network_buf, data_size, "\"pop\":");
@@ -179,7 +183,7 @@ int update_forecast_data(const char *city, const char *api_key)
         const size_t description_num = get_value_ptrs(&description_list, network_buf, data_size, "\"description\":\"");
         get_value_ptrs(&dt_list, network_buf, data_size,"\"dt\":");
 
-        split(network_buf, data_size, "},\"");
+        split(network_buf, "},\"");
 
         if(description_list){
             memset(service_data.desciption, 0, sizeof(service_data.desciption));

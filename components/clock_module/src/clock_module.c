@@ -40,25 +40,28 @@ void set_offset(int offset_hour)
 }
 
 
-// static void set_time_cb(struct timeval *tv)
-// {
-//     device_set_state(BIT_NEW_MIN|BIT_IS_TIME|BIT_SNTP_OK);
-// }
+static void set_time_cb(struct timeval *tv)
+{
+    device_set_state(BIT_EVENT_NEW_MIN|BIT_IS_TIME);
+}
 
 
-// void init_sntp()
-// {
-//     esp_sntp_set_time_sync_notification_cb(set_time_cb);
-//     esp_sntp_set_sync_mode(SNTP_SYNC_MODE_SMOOTH);
-//     esp_sntp_setoperatingmode(ESP_SNTP_OPMODE_POLL);
-//     esp_sntp_setservername(0, "0.ua.pool.ntp.org");
-//     esp_sntp_setservername(1, "1.ua.pool.ntp.org");
-//     esp_sntp_setservername(2, "2.ua.pool.ntp.org");
-//     esp_sntp_setservername(3, "3.ua.pool.ntp.org");
-//     esp_sntp_setservername(4, "pool.ntp.org");
-//     esp_sntp_servermode_dhcp(1);
-//     esp_sntp_init();
-// }
+void init_sntp()
+{
+    if(esp_sntp_enabled()){
+        esp_sntp_restart();
+    } else {
+        esp_sntp_set_time_sync_notification_cb(set_time_cb);
+        esp_sntp_set_sync_mode(SNTP_SYNC_MODE_SMOOTH);
+        esp_sntp_setoperatingmode(ESP_SNTP_OPMODE_POLL);
+        esp_sntp_setservername(0, "0.ua.pool.ntp.org");
+        esp_sntp_setservername(1, "1.ua.pool.ntp.org");
+        esp_sntp_setservername(2, "2.ua.pool.ntp.org");
+        esp_sntp_setservername(3, "pool.ntp.org");
+        sntp_servermode_dhcp(1);
+        esp_sntp_init();
+    }
+}
 
 
 
