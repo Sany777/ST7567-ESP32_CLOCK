@@ -152,16 +152,14 @@ void device_stop_timer()
 int device_init_timer()
 {
     timer_semaphore = xSemaphoreCreateMutex();
-    if(timer_semaphore){
-        const esp_timer_create_args_t periodic_timer_args = {
-            .callback = &periodic_timer_cb,
-            .arg = NULL,
-            .name = "device timer",
-            .skip_unhandled_events = true
-        };
-        return esp_timer_create(&periodic_timer_args, &periodic_timer);
-    }
-    return ESP_FAIL;
+    assert(timer_semaphore);
+    const esp_timer_create_args_t periodic_timer_args = {
+        .callback = &periodic_timer_cb,
+        .arg = NULL,
+        .name = "device timer",
+        .skip_unhandled_events = true
+    };
+    return esp_timer_create(&periodic_timer_args, &periodic_timer);
 }
 
 int device_start_timer()

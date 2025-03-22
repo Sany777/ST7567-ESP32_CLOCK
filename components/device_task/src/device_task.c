@@ -118,6 +118,7 @@ static void main_task(void *pv)
     create_periodic_task(update_time_handler, INTERVAL_UPDATE_TIME, FOREVER);
     bool backlight_en = false, task_run;
     float cur_volt_val;
+    vTaskDelay(200/portTICK_PERIOD_MS);
     for(;;){
 
         task_run = true;
@@ -128,11 +129,9 @@ static void main_task(void *pv)
             dht20_read_data(&temp, NULL);
         }
         device_set_pin(PIN_DHT20_EN, 0);
+        cmd = CMD_UPDATE_DATA;
         do{
-           
-            vTaskDelay(100/portTICK_PERIOD_MS);
             bits = device_get_state();
-
             if(bits&BIT_EVENT_BUT_LONG_PRESSED){
                 start_single_signale(120, 2000);
                 backlight_en = !backlight_en;
@@ -208,7 +207,6 @@ static void main_task(void *pv)
                     cmd = CMD_UPDATE_DATA;
                 }
             }
-            
             if(cmd != NO_DATA){
                 lcd_fill(UNCOLORED);
                 func_list[screen](cmd);
@@ -260,7 +258,7 @@ static void service_task(void *pv)
     for(;;){
         bits = device_wait_bits_untile(BIT_UPDATE_FORECAST_DATA|BIT_START_SERVER|BIT_FORCE_UPDATE_FORECAST_DATA, 
                             portMAX_DELAY);
-
+        device_set_state(BITS_DENIED_SLEEP);
         if(bits & BIT_START_SERVER){
             if(start_ap() == ESP_OK){
                 vTaskDelay(1500/portTICK_PERIOD_MS);
@@ -298,6 +296,7 @@ static void service_task(void *pv)
 
         if(bits&BIT_UPDATE_FORECAST_DATA || bits&BIT_FORCE_UPDATE_FORECAST_DATA){
             esp_res = connect_sta(device_get_ssid(),device_get_pwd());
+            vTaskDelay(200/portTICK_PERIOD_MS);
             if(esp_res == ESP_OK){
                 device_set_state(BIT_STA_CONF_OK);
                 if(bits&BIT_UPDATE_TIME || !(bits&BIT_IS_TIME)){
@@ -340,7 +339,7 @@ static void service_task(void *pv)
             wifi_stop();
             device_set_state(BIT_EVENT_NEW_DATA);
             vTaskDelay(1000/portTICK_PERIOD_MS);
-            device_clear_state(BIT_UPDATE_FORECAST_DATA|BIT_FORCE_UPDATE_FORECAST_DATA);
+            device_clear_state(BIT_UPDATE_FORECAST_DATA|BIT_FORCE_UPDATE_FORECAST_DATA|BITS_DENIED_SLEEP);
         }
     }
 }

@@ -146,6 +146,8 @@ int device_update_time()
             settimeofday(&now, NULL);
             free(dateTime);
             dateTime = NULL;
+        } else {
+            err = ESP_FAIL;
         }
     }
     esp_http_client_cleanup(client);
