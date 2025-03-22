@@ -231,23 +231,28 @@ static int read_data()
     return ESP_OK;
 }
 
+bool is_signal_allowed(const struct tm *tm_info)
+{
+    return tm_info->tm_wday != 0 && tm_info->tm_hour >= 6 && tm_info->tm_hour < 23;
+}
 
 bool is_signale(const struct tm *tm_info)
 {
-    if(tm_info->tm_wday == 0) return false;
-    int cur_min = tm_info->tm_hour*60 + tm_info->tm_min;
-    int cur_day = tm_info->tm_wday - 1;
-    const unsigned notif_num = main_data.schema[cur_day];
-    unsigned *notif_data = main_data.notification;
-    if( notif_num && notif_data
-            && cur_min > FORBIDDED_NOTIF_HOUR){
-        for(int i=0; i<cur_day-1; ++i){
-            // data offset
-            notif_data += main_data.schema[i];
-        }
-        for(int i=0; i<notif_num; ++i){
-            if(notif_data[i] == cur_min){
-                return true;
+    if(is_signal_allowed(tm_info)){
+        int cur_min = tm_info->tm_hour*60 + tm_info->tm_min;
+        int cur_day = tm_info->tm_wday - 1;
+        if(cur_day > WEEK_DAYS_NUM)return false;
+        const unsigned notif_num = main_data.schema[cur_day];
+        unsigned *notif_data = main_data.notification;
+        if(notif_num && notif_data){
+            for(int i=0; i<cur_day-1; ++i){
+                // data offset
+                notif_data += main_data.schema[i];
+            }
+            for(int i=0; i<notif_num; ++i){
+                if(notif_data[i] == cur_min){
+                    return true;
+                }
             }
         }
     }

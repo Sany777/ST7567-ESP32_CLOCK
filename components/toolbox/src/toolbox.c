@@ -7,9 +7,9 @@
 
 uint8_t battery_voltage_to_percentage(float voltage) 
 {
-    if (voltage >= 4.2) return 100;
-    if (voltage <= MIN_VOLTAGE) return 0;
-    return (uint8_t)((voltage - MIN_VOLTAGE) * 100 / (4.2 - MIN_VOLTAGE));
+    if (voltage > 3.9) return 100;
+    if (voltage <= 3.3) return 0;
+    return (uint8_t)((voltage - 3.3) * 100 / (3.9 - 3.3));
 }
 
 int get_actual_forecast_data_index(const int cur_hour, const int update_data_time)

@@ -10,6 +10,7 @@ extern "C" {
 #include "time.h"
 
 #define MIN_VOLTAGE 3.2
+#define ALARM_VOLTAGE 3.35
 
 enum BasicConst{
     NO_DATA = -1,
@@ -100,7 +101,8 @@ int get_but_state();
 #define I2C_MASTER_SDA_IO       GPIO_NUM_22        
 
 
-// --------------------------------------- common
+
+bool is_signal_allowed(const struct tm *tm_info);
 int device_get_offset();
 void device_set_pwd(const char *str);
 void device_set_ssid(const char *str);

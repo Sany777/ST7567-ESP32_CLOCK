@@ -35,7 +35,7 @@ enum TimeoutMS{
     TIMEOUT_SEC             = 1000,
     TIMEOUT_2_SEC           = 2*TIMEOUT_SEC,
     TIMEOUT_5_SEC           = 5*TIMEOUT_SEC,
-    TIMEOUT_BUT_INP         = 10*TIMEOUT_SEC,
+    TIMEOUT_BUT_INP         = 5*TIMEOUT_SEC,
     TIMEOUT_6_SEC           = 6*TIMEOUT_SEC,
     TIMEOUT_20_SEC          = 20*TIMEOUT_SEC,
     TIMEOUT_MINUTE          = 60*TIMEOUT_SEC,
@@ -43,8 +43,9 @@ enum TimeoutMS{
     TIMEOUT_HOUR            = 60*TIMEOUT_MINUTE,
     DELAY_TRY_GET_DATA      = 2*TIMEOUT_MINUTE,
     DELAY_UPDATE_FORECAST   = 32*TIMEOUT_MINUTE,
-    INTERVAL_CHECK_BAT      = TIMEOUT_HOUR,
-    INTERVAL_UPDATE_TIME    = 8*TIMEOUT_HOUR
+    INTERVAL_CHECK_BAT      = TIMEOUT_MINUTE * 10,
+    INTERVAL_UPDATE_TIME    = 8*TIMEOUT_HOUR,
+    LOW_BAT_SIG_DELAY       = TIMEOUT_MINUTE * 10
 };
 
 enum TaskDelay{
@@ -95,7 +96,7 @@ static void update_forecast_handler();
 static void timer_counter_handler();
 static void check_bat_status_handler();
 static void update_time_handler();
-
+static void low_bat_signal_handler();
 
 
 
@@ -112,12 +113,11 @@ static void main_task(void *pv)
     next_screen = SCREEN_MAIN;
     device_set_pin(PIN_LCD_BACKLIGHT_EN, 0);
     lcd_init();
-    device_set_state(BIT_UPDATE_FORECAST_DATA|BIT_CHECK_BAT);
-    create_periodic_task(check_bat_status_handler, INTERVAL_CHECK_BAT, FOREVER);
+    device_set_state(BIT_UPDATE_FORECAST_DATA);
+    create_periodic_task(check_bat_status_handler, TIMEOUT_MINUTE * 2, FOREVER);
     create_periodic_task(update_time_handler, INTERVAL_UPDATE_TIME, FOREVER);
     bool backlight_en = false, task_run;
-    int volt_err_count = 0;
-
+    float cur_volt_val;
     for(;;){
 
         task_run = true;
@@ -128,11 +128,9 @@ static void main_task(void *pv)
             dht20_read_data(&temp, NULL);
         }
         device_set_pin(PIN_DHT20_EN, 0);
-        
         do{
            
             vTaskDelay(100/portTICK_PERIOD_MS);
-            
             bits = device_get_state();
 
             if(bits&BIT_EVENT_BUT_LONG_PRESSED){
@@ -182,33 +180,28 @@ static void main_task(void *pv)
                 }
                 device_clear_state(BIT_EVENT_NEW_T_MIN);
             } else if(bits&BIT_CHECK_BAT) {
-                volt_val = device_get_voltage();
-                if(volt_val > 2.8){
-                    if(volt_val < 3.4){
-                        if(volt_val < MIN_VOLTAGE){
-                            if(volt_err_count < 20){
-                                volt_err_count += 1;
-                            } else {
-                                start_signale_series(100, 20, 2000);
-                                device_set_pin(PIN_LCD_BACKLIGHT_EN, 0);
-                                device_set_pin(PIN_DHT20_EN, 0);
-                                vTaskDelay(1000/portTICK_PERIOD_MS);
-                                esp_deep_sleep(UINT64_MAX);
-                            }
-                        } else {
-                            volt_err_count = 0;
-                        }
+                cur_volt_val = device_get_voltage();
+                if( ! ((cur_volt_val - volt_val) > 0.2) && cur_volt_val < ALARM_VOLTAGE){
+                    if(cur_volt_val < MIN_VOLTAGE
+                        || (bits&BIT_IS_TIME && ! is_signal_allowed(tinfo))){
+                        device_set_pin(PIN_LCD_BACKLIGHT_EN, 0);
+                        device_set_pin(PIN_DHT20_EN, 0);
+                        vTaskDelay(1000/portTICK_PERIOD_MS);
+                        esp_deep_sleep(UINT64_MAX);
+                    }
+                    if(! (bits&BIT_EVENT_IS_LOW_BAT)){
                         device_set_state(BIT_EVENT_IS_LOW_BAT);
                         cmd = CMD_UPDATE_DATA;
-                    } else if(bits&BIT_EVENT_IS_LOW_BAT){
-                        device_clear_state(BIT_EVENT_IS_LOW_BAT);
-                        cmd = CMD_UPDATE_DATA;
-                        volt_err_count = 0;
+                        create_periodic_task(low_bat_signal_handler, LOW_BAT_SIG_DELAY, FOREVER);
                     }
-                    device_clear_state(BIT_CHECK_BAT);
+                } else if(bits&BIT_EVENT_IS_LOW_BAT){
+                    device_clear_state(BIT_EVENT_IS_LOW_BAT);
                     cmd = CMD_UPDATE_DATA;
+                    remove_task(low_bat_signal_handler);
                 }
-            }else if( ! (bits&BITS_DENIED_SLEEP) ){
+                volt_val = cur_volt_val;
+                device_clear_state(BIT_CHECK_BAT);
+            }else if( ! (bits&BITS_DENIED_SLEEP) && ! (bits&BIT_WAIT_SIGNALE)){
                 time_work = (esp_timer_get_time() - start_task_time) / 1000;
                 if(time_work > timeout){
                     task_run = false;
@@ -229,10 +222,6 @@ static void main_task(void *pv)
             } 
         }while(task_run);
 
-        if(bits&BIT_EVENT_IS_LOW_BAT){
-            start_signale_series(100, 10, 2000);
-            vTaskDelay(2000/portTICK_PERIOD_MS);
-        }
         if(backlight_en){
             device_set_pin(PIN_LCD_BACKLIGHT_EN, 0);
             backlight_en = false;
@@ -268,8 +257,6 @@ static void service_task(void *pv)
     int delay_update_forecast = DELAY_TRY_GET_DATA;
     vTaskDelay(100/portTICK_PERIOD_MS);
     int esp_res, wait_client_timeout;
-    bool fail_init_sntp = false;
-    struct tm * tinfo;
     for(;;){
         bits = device_wait_bits_untile(BIT_UPDATE_FORECAST_DATA|BIT_START_SERVER|BIT_FORCE_UPDATE_FORECAST_DATA, 
                             portMAX_DELAY);
@@ -660,6 +647,7 @@ static void timer_counter_handler()
 static void check_bat_status_handler()
 {
     device_set_state_isr(BIT_CHECK_BAT);
+    create_periodic_task(check_bat_status_handler, INTERVAL_CHECK_BAT, 1);
 }
 
 static void update_time_handler()
@@ -667,4 +655,8 @@ static void update_time_handler()
     device_set_state_isr(BIT_UPDATE_TIME);
 }
 
+static void low_bat_signal_handler()
+{
+    start_signale_series(100, 10, 2000);
+}
 
