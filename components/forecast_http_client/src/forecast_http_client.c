@@ -14,51 +14,94 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+#define TIME_SERVER_HOST "worldtimeapi.org"
 #define OPENWEATHER_SERVER_HOST "api.openweathermap.org"
 #define SERVER_PORT "80" 
 #define SIZE_URL_BUF 256
 #define FORECAST_LIST_SIZE 5
-#define MAX_RETRIES 3  
-#define RETRY_DELAY_MS 1000  
+#define MAX_RETRIES 5  
+#define RETRY_DELAY_MS 500  
 
 #define MAX_KEY_NUM 10
-
+static const char *TAG = "fetch_data";
 extern char network_buf[];
 
-bool fetch_data(const char *request, char *response_buf, uint32_t *resp_size) ;
+int fetch_data(const char *SERVER_HOST, const char *REQUEST, char *response_buf);
 static size_t get_value_ptrs(char ***value_list, char *data_buf, const size_t buf_len, const char *key);
 static void split(char *data_buf, const char *split_chars_str, uint32_t data_size);
 
 
-bool fetch_weather_data(const char *city, const char *api_key, uint32_t *resp_size) 
+int fetch_weather_data(const char *city, const char *api_key) 
 {
-    char request[SIZE_URL_BUF + 128];
+    char request[SIZE_URL_BUF];
     snprintf(request, sizeof(request),
-        "GET /data/2.5/forecast?q=%s&units=metric&cnt=%d&appid=%s HTTP/1.1\r\n"
-        "Host: " OPENWEATHER_SERVER_HOST "\r\n"
-        "Connection: close\r\n\r\n",
+        "/data/2.5/forecast?q=%s&units=metric&cnt=%d&appid=%s",
         city, FORECAST_LIST_SIZE, api_key);
-    return fetch_data(request, network_buf, resp_size);
+    return fetch_data(OPENWEATHER_SERVER_HOST, request, network_buf);
 }
 
-#define TIME_SERVER_HOST "worldtimeapi.org"
-
-bool fetch_time_data(uint32_t *resp_size) 
+int fetch_time_data() 
 {
-    return true;
+    return fetch_data(TIME_SERVER_HOST, "/api/timezone/Etc/UTC", network_buf);
+}
+
+int fetch_data(const char *SERVER_HOST, const char *REQUEST, char *response_buf) 
+{
     char request[SIZE_URL_BUF + 128];
     snprintf(request, sizeof(request),
-        "GET /api/timezone/Etc/UTC HTTP/1.1\r\n"
-        "Host: " TIME_SERVER_HOST "\r\n"
-        "Connection: close\r\n\r\n");
-    return fetch_data(request, network_buf, resp_size);
+        "GET %s HTTP/1.1\r\n"
+        "Host: %s \r\n"
+        "Connection: close\r\n\r\n", REQUEST, SERVER_HOST);
+    int resp_size = 0;
+    struct addrinfo hints = {0}, *res = NULL;
+    int sock = -1;
+    int retries = 0;
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+
+    while (retries < MAX_RETRIES) {
+        retries++;
+        if (res == NULL){
+            if(getaddrinfo(SERVER_HOST, SERVER_PORT, &hints, &res) != 0) {
+                ESP_LOGE(TAG, "DNS resolution failed");
+                continue;
+            }
+        }
+        if(sock < 0){
+            sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+            if (sock < 0) {
+                ESP_LOGE(TAG, "Socket creation failed");
+                vTaskDelay(pdMS_TO_TICKS(RETRY_DELAY_MS));
+                continue;
+            }
+        }
+        if (connect(sock, res->ai_addr, res->ai_addrlen) != 0) {
+            ESP_LOGE(TAG, "Connection failed");
+            vTaskDelay(pdMS_TO_TICKS(RETRY_DELAY_MS));
+            continue;
+        }
+        if (send(sock, request, strlen(request), 0) < 0) {
+            vTaskDelay(pdMS_TO_TICKS(RETRY_DELAY_MS));
+            continue;
+        }
+        resp_size = recv(sock, response_buf, NET_BUF_LEN - 1, 0);
+        if (resp_size > 0) {
+            response_buf[resp_size] = '\0'; 
+            break;
+        } 
+        vTaskDelay(pdMS_TO_TICKS(RETRY_DELAY_MS));
+    }
+    if(res) freeaddrinfo(res); 
+    if(sock != -1)close(sock);
+    return resp_size;
 }
+
 
 bool device_update_time()
 {
-    uint32_t data_size = 0;
     char ** dateTime = NULL;
-    if(fetch_time_data(&data_size)){
+    uint32_t data_size = fetch_time_data();
+    if(data_size){
         get_value_ptrs(&dateTime, network_buf, data_size, "\"dateTime\":");
         if(dateTime){
             struct tm tinfo;
@@ -84,63 +127,16 @@ bool device_update_time()
 
 
 
-bool fetch_data(const char *request, char *response_buf, uint32_t *resp_size) 
-{
-    *resp_size = 0;
-    struct addrinfo hints = {0}, *res;
-    int sock = -1;
-    int retries = 0;
-    while (retries < MAX_RETRIES) {
-        retries++;
-        hints.ai_family = AF_INET;
-        hints.ai_socktype = SOCK_STREAM;
-        if (getaddrinfo(OPENWEATHER_SERVER_HOST, SERVER_PORT, &hints, &res) != 0) {
-            vTaskDelay(pdMS_TO_TICKS(RETRY_DELAY_MS));
-            continue;
-        }
 
-        sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-        if (sock < 0) {
-            freeaddrinfo(res);
-            vTaskDelay(pdMS_TO_TICKS(RETRY_DELAY_MS));
-            continue;
-        }
-
-        if (connect(sock, res->ai_addr, res->ai_addrlen) != 0) {
-            close(sock);
-            freeaddrinfo(res);
-            vTaskDelay(pdMS_TO_TICKS(RETRY_DELAY_MS));
-            continue;
-        }
-        freeaddrinfo(res); 
-
-        if (send(sock, request, strlen(request), 0) < 0) {
-            close(sock);
-            vTaskDelay(pdMS_TO_TICKS(RETRY_DELAY_MS));
-            continue;
-        }
-
-        *resp_size = recv(sock, response_buf, NET_BUF_LEN - 1, 0);
-        if (*resp_size > 0) {
-            response_buf[*resp_size] = '\0'; 
-            close(sock);
-            return true;  
-        } else {
-            close(sock);
-            vTaskDelay(pdMS_TO_TICKS(RETRY_DELAY_MS));
-        }
-    }
-    return false; 
-}
 
 bool update_forecast_data(const char *city, const char *api_key)
 {
-    uint32_t data_size = 0;
     char **feels_like_list = NULL, **description_list = NULL, **pop_list = NULL, **dt_list = NULL; 
-
+    
     if(strnlen(city, MAX_STR_LEN) == 0 || strnlen(api_key, MAX_STR_LEN) != API_LEN)
-        return false;
-    if(fetch_weather_data(city, api_key, &data_size)){
+    return false;
+    uint32_t data_size = fetch_weather_data(city, api_key);
+    if(data_size){
         const size_t pop_num = get_value_ptrs(&pop_list, network_buf, data_size, "\"pop\":");
         const size_t feels_like_num = get_value_ptrs(&feels_like_list, network_buf, data_size, "\"feels_like\":");
         const size_t description_num = get_value_ptrs(&description_list, network_buf, data_size, "\"description\":\"");

@@ -115,9 +115,9 @@ static void main_task(void *pv)
     device_set_state(BIT_UPDATE_FORECAST_DATA);
     create_periodic_task(check_bat_status_handler, TIMEOUT_MINUTE * 2, FOREVER);
     create_periodic_task(update_time_handler, INTERVAL_UPDATE_TIME, FOREVER);
-    bool backlight_en = false, task_run;
+    bool backlight_en = false, task_run, but_pressed = true;
     float cur_volt_val;
-    vTaskDelay(200/portTICK_PERIOD_MS);
+    vTaskDelay(500/portTICK_PERIOD_MS);
     for(;;){
 
         task_run = true;
@@ -129,6 +129,8 @@ static void main_task(void *pv)
         }
         device_set_pin(PIN_DHT20_EN, 0);
         do{
+            if(but_pressed) 
+                vTaskDelay(100/portTICK_PERIOD_MS);
             bits = device_get_state();
             if(bits&BIT_EVENT_BUT_LONG_PRESSED){
                 start_single_signale(120, 2000);
@@ -237,7 +239,9 @@ static void main_task(void *pv)
             if(!timer_run){
                 next_screen = SCREEN_MAIN;
             }
+            but_pressed = false;
         } else {
+            but_pressed = true;
             timeout = TIMEOUT_BUT_INP;
         }
     }
@@ -265,7 +269,7 @@ static void service_task(void *pv)
                     device_set_state(BIT_SERVER_RUN);
                     open_sesion = false;
                     device_set_state(BIT_EVENT_NEW_DATA);
-                    while(bits = device_get_state(), bits&BIT_SERVER_RUN){
+                    while((bits = device_get_state()) & BIT_SERVER_RUN){
                         if(open_sesion){
                             if(!(bits&BIT_IS_AP_CLIENT) ){
                                 device_clear_state(BIT_SERVER_RUN);
@@ -294,9 +298,9 @@ static void service_task(void *pv)
 
         if(bits&BIT_UPDATE_FORECAST_DATA || bits&BIT_FORCE_UPDATE_FORECAST_DATA){
             if(connect_sta(device_get_ssid(), device_get_pwd()) == ESP_OK){
-                vTaskDelay(200/portTICK_PERIOD_MS);
                 device_set_state(BIT_STA_CONF_OK);
                 if(bits&BIT_UPDATE_TIME || !(bits&BIT_IS_TIME)){
+                    vTaskDelay(500/portTICK_PERIOD_MS);
                     if(device_update_time()){
                         bits = device_set_state(BIT_IS_TIME);
                     } else {
@@ -307,7 +311,7 @@ static void service_task(void *pv)
                         device_clear_state(BIT_UPDATE_TIME);  
                     }
                 }
-                vTaskDelay(200/portTICK_PERIOD_MS);
+                vTaskDelay(500/portTICK_PERIOD_MS);
                 if(update_forecast_data(device_get_city_name(),device_get_api_key())){
                     service_data.update_data_time = get_cur_time_tm()->tm_hour;
                     if(! (bits&BIT_FORECAST_OK)){
@@ -335,27 +339,22 @@ static void service_task(void *pv)
 
 
 
-int task_init()
+void task_init()
 {
-    if(xTaskCreate(
+    xTaskCreate(
             service_task, 
             "service",
             20000, 
             NULL, 
             3,
-            NULL) != pdTRUE
-        || xTaskCreate(
+            NULL);
+    xTaskCreate(
             main_task, 
             "main",
             20000, 
             NULL, 
             4,
-            NULL) != pdTRUE 
-    ){
-        ESP_LOGE("","task create failure");
-        return ESP_FAIL;
-    }
-    return ESP_OK;   
+            NULL);
 }
 
 

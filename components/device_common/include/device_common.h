@@ -20,7 +20,7 @@ enum BasicConst{
     FORBIDDED_NOTIF_HOUR    = 6*60,
     DESCRIPTION_SIZE        = 20,
     FORECAST_LIST_SIZE      = 5,
-    NET_BUF_LEN             = 5000,
+    NET_BUF_LEN             = 5100,
 };
 
 enum Bits{

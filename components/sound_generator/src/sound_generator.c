@@ -93,7 +93,7 @@ void start_signale_series(unsigned delay, unsigned count, unsigned freq)
     }
 }
 
-static IRAM_ATTR void stop_signale()
+static void stop_signale()
 {
     ledc_timer_pause(ledc_timer.speed_mode, ledc_timer.timer_num);
     device_clear_state_isr(BIT_WAIT_SIGNALE);

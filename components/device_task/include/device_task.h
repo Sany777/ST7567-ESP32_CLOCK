@@ -8,7 +8,7 @@ extern "C" {
 #endif
 
 
-int task_init();
+void task_init();
 
 
 

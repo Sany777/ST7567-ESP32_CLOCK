@@ -9,7 +9,6 @@
 #define ADC_MAX_VALUE   4095.0F      // 12-bit ADC maximum value
 #define VREF            3.3F         // attenuation 11dB
 #define DEV_CONST       11.1F        // resistive divider
-#define MEAS_NUM        10           // Number of samples
 
 static adc_oneshot_unit_handle_t adc_handle;
 

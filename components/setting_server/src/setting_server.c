@@ -36,6 +36,7 @@ static const char *MES_SUCCESSFUL = "Successful";
 
 void server_stop()
 {
+    deinit_dns_server();
     device_clear_state(BIT_SERVER_RUN);
 }
 
@@ -522,7 +523,7 @@ int init_server(char *server_buf)
         .user_ctx = server_buf
     };
     httpd_register_uri_handler(server, &redir_uri);
-
+    init_dns_server_task();
     return ESP_OK;
 }
 

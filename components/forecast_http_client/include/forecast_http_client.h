@@ -14,12 +14,4 @@ bool device_update_time();
 
 
 
-// int update_forecast_data(const char *city, const char *api_key);
-// int device_update_time();
-
-
-
-
-
-
 #endif
