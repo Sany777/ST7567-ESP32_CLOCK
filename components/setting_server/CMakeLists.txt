@@ -11,4 +11,5 @@ idf_component_register(SRC_DIRS "src"
                     lwip 
                     freertos 
                     esp_netif
+                    app_update
                 )

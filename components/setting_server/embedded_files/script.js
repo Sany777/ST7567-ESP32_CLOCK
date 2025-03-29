@@ -4,11 +4,12 @@ const ACT_PREF = 'a'
 const LIST_DAY = ['Monday','Thusday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 // [formName [type, max limit, min limit,[inputNames],]]
 const FORMS_LIST = [
-['Network',[['text','32','1',['SSID']],['text','32','8',['PWD']]]],
-['Openweather',[['text','32','1',['City']],['text','32','32',['Key']]]],
-['Offset',[['number','23','0',['Hour']]]],
-['Loud',[['number','99','0',['%']]]],
-['Status',[['checkbox',1,,['Notifications','Openweather Ok','SNTP Ok',"STA conf. Ok"]]]]
+    ['Network',[['text','32','1',['SSID']],['text','32','8',['PWD']]]],
+    ['Openweather',[['text','32','1',['City']],['text','32','32',['Key']]]],
+    ['Offset',[['number','23','0',['Hour']]]],
+    ['Loud',[['number','99','0',['%']]]],
+    ['OTA', [['file','','',['firmware']]]],
+    ['Status',[['checkbox',1,,['Notifications','Openweather Ok','SNTP Ok','STA conf. Ok']]]]
 ];
 
 const modal = window.document.getElementById('modal');
@@ -109,26 +110,26 @@ addAction(d, td, str_val);
 function getSetting()
 {
 fetch('/data?', {
-method:'POST',
-mode: 'no-cors',
-body: null,
+    method:'POST',
+    mode: 'no-cors',
+    body: null,
 })
 .then((r) => r.json())
 .then((r) => {
 for(const key in r){
-const value = r[key];
-if(key === 'schema'){
-setNotificationData(value, r['notif']);
-} else if(key === 'Status'){
-const flags = Number(value);
-[...document.querySelectorAll('[type=checkbox]')].forEach((checkbox, i) =>{
-checkbox.checked = flags&(1<<i);
-});
-} else if(key!='notif') {
-const input = document.getElementById(key);
-if(input)
-input.value = value;
-}
+    const value = r[key];
+    if(key === 'schema'){
+        setNotificationData(value, r['notif']);
+    } else if(key === 'Status'){
+        const flags = Number(value);
+    [...document.querySelectorAll('[type=checkbox]')].forEach((checkbox, i) =>{
+    checkbox.checked = flags&(1<<i);
+    });
+    } else if(key!='notif') {
+    const input = document.getElementById(key);
+    if(input)
+    input.value = value;
+    }
 }
  })
 .catch((e) => showModal(e));
@@ -162,16 +163,16 @@ input.type = type;
 input.id = inputName;
 input.name = inputName;
 if(type === 'text'){
-input.value = '';
-input.maxLength = maxLimit;
-input.minLength = minLimit;
-input.placeholder = 'Enter '+ inputName;
+    input.value = '';
+    input.maxLength = maxLimit;
+    input.minLength = minLimit;
+    input.placeholder = 'Enter '+ inputName;
 } else if(type == 'checkbox' 
 && i >= maxLimit){
-input.disabled = true;
+    input.disabled = true;
 } else if(type == 'number'){
-input.max = maxLimit;
-input.min = minLimit;
+    input.max = maxLimit;
+    input.min = minLimit;
 }
 label.appendChild(input);
 form.appendChild(label);
@@ -232,36 +233,39 @@ let i=0;
 const childsList = document.forms[formName];
 if(childsList){
 for(const child of childsList){
-let value = child.value;
-if(value){
-if(child.type === 'number'){
-data = value;
-} else if(child.type === 'text'){
-if(data == null)
-data = js;
-js[child.name] = value;
-} else if(child.type === 'time'){
-const day = Number(child.name.split('t')[0]);
-++schema[day];
-const min_num = value.split(':').join('');
-arr.push(get_min_str(min_num));
-} else if(child.type === 'checkbox'){
-if(data == null)
-data = 0;
-if(child.checked){
-data |= 1<<i;
-}
-i++;
-}
+    let value = child.value;
+    if(value){
+    if(child.type === 'number'){
+        data = value;
+    } else if(child.type === 'text'){
+        if(data == null)
+        data = js;
+        js[child.name] = value;
+    } else if(child.type === 'time'){
+        const day = Number(child.name.split('t')[0]);
+        ++schema[day];
+        const min_num = value.split(':').join('');
+        arr.push(get_min_str(min_num));
+    } else if(child.type === 'checkbox'){
+        if(data == null)
+            data = 0;
+        if(child.checked){
+            data |= 1<<i;
+        }
+        i++;
+    } else if(child.type === "file"){
+        data=child.files[0];
+        break;
+    }
 }
 }
 if(formName == 'Notification'){
-data = JSON.stringify({
-schema:get_schema_str(schema),
-notif:arr.join('')
-});
+    data=JSON.stringify({
+        schema:get_schema_str(schema),
+        notif:arr.join('')
+    });
 } else if(data === js){
-data=JSON.stringify(js);
+    data=JSON.stringify(js);
 }
 sendDataForm(formName, data);
 }
@@ -271,9 +275,9 @@ sendDataForm(formName, data);
 async function sendDataForm(path, data=""){
 let res = true;
 await fetch('/'+ path, {
-method:'POST',
-mode:'no-cors',
-body:data,
+    method:'POST',
+    mode:'no-cors',
+    body:data,
 }).then((r)=>{
 if(!r.ok)
 res=false; 

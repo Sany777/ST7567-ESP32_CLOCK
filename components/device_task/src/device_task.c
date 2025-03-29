@@ -117,6 +117,7 @@ static void main_task(void *pv)
     create_periodic_task(update_time_handler, INTERVAL_UPDATE_TIME, FOREVER);
     bool backlight_en = false, task_run, but_pressed = true;
     float cur_volt_val;
+    start_single_signale(120, 1500);
     vTaskDelay(500/portTICK_PERIOD_MS);
     for(;;){
 

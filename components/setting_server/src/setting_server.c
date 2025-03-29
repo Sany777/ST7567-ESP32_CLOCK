@@ -1,7 +1,7 @@
 #include "setting_server.h"
 
 #include <sys/stat.h>
-#include <dirent.h>
+// #include <dirent.h>
 #include "cJSON.h"
 #include "stdbool.h"
 
@@ -15,7 +15,11 @@
 #include "device_macro.h"
 #include "wifi_service.h"
 #include "device_common.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
+#include "esp_ota_ops.h"
+#include "esp_partition.h"
 
 static httpd_handle_t server;
 
@@ -25,7 +29,17 @@ static const char *MES_NO_MEMORY = "No memory";
 static const char *MES_BAD_DATA_FOMAT = "wrong data format";
 static const char *MES_SUCCESSFUL = "Successful";
 
+#define MAX_OTA_SIZE 0x180000 
 
+
+#define CHECK_AND_RESP(a, req, goto_tag)                                                 \
+        do{     \
+        int r = (a);                                                                            \
+        if (ESP_OK != (r)) {                                                                \
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, esp_err_to_name(r));  \
+            goto goto_tag;                                                                  \
+        }                                                                                   \
+    } while(0)
 
 #define SEND_REQ_ERR(_req_, _str_, _fail_) \
     do{ httpd_resp_send_err((_req_), HTTPD_400_BAD_REQUEST, (_str_)); goto _fail_;}while(0)
@@ -33,11 +47,52 @@ static const char *MES_SUCCESSFUL = "Successful";
 #define SEND_SERVER_ERR(_req_, _str_, _fail_) \
     do{ httpd_resp_send_err((_req_), HTTPD_500_INTERNAL_SERVER_ERROR, (_str_)); goto _fail_;}while(0)
 
-
 void server_stop()
 {
     deinit_dns_server();
     device_clear_state(BIT_SERVER_RUN);
+}
+
+static 
+esp_err_t handler_update_esp(httpd_req_t *req)
+{
+    const esp_partition_t *update_partition = NULL;
+    ESP_LOGI("OTA", "Content-Length: %d", req->content_len);
+    esp_ota_handle_t update_handle = 0;
+    const int total_len = req->content_len;
+    char * const server_buf = (char *)req->user_ctx;
+    int cur_len = 0;
+    int received = 0;
+    update_partition = esp_ota_get_next_update_partition(NULL);
+    if (!update_partition) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "No OTA partition found");
+        return ESP_FAIL;
+    }
+    if (total_len > update_partition->size) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "content too long");
+        return ESP_FAIL;
+    };
+    CHECK_AND_RESP(esp_ota_begin(update_partition, OTA_SIZE_UNKNOWN, &update_handle), req, err_1);
+    while (cur_len < total_len) {
+        received = httpd_req_recv(req, server_buf, NET_BUF_LEN-1);
+        if(received <= 0 ){
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,"Failed to post control value");
+            goto err_2;
+        }
+        cur_len += received;
+        CHECK_AND_RESP(esp_ota_write(update_handle, server_buf, received), req, err_2);
+    }
+    CHECK_AND_RESP(esp_ota_end(update_handle), req, err_2);
+    CHECK_AND_RESP(esp_ota_set_boot_partition(update_partition), req, err_2);
+    httpd_resp_sendstr(req, MES_SUCCESSFUL);
+    vTaskDelay(100);
+    esp_restart();
+    return ESP_OK;
+err_2:
+    esp_ota_abort(update_handle);
+err_1:
+    httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Fail update");
+    return ESP_FAIL;
 }
 
 
@@ -96,10 +151,8 @@ static esp_err_t handler_set_network(httpd_req_t *req)
     if(!root){
         SEND_SERVER_ERR(req, MES_NO_MEMORY, fail_1);
     }
-
     ssid_name_j = cJSON_GetObjectItemCaseSensitive(root, "SSID");
-    pwd_wifi_j = cJSON_GetObjectItemCaseSensitive(root, "PWD");
-    
+    pwd_wifi_j = cJSON_GetObjectItemCaseSensitive(root, "PWD");  
     if(cJSON_IsString(ssid_name_j) && (ssid_name_j->valuestring != NULL)){
         device_set_ssid(ssid_name_j->valuestring);
     }
@@ -412,7 +465,7 @@ int init_server(char *server_buf)
 {
     if(server != NULL) return ESP_FAIL;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.max_uri_handlers = 13;
+    config.max_uri_handlers = 14;
     config.uri_match_fn = httpd_uri_match_wildcard;
 
     if(httpd_start(&server, &config) != ESP_OK){
@@ -515,6 +568,14 @@ int init_server(char *server_buf)
         .user_ctx = server_buf
     };
     httpd_register_uri_handler(server, &set_loud_uri);
+
+    httpd_uri_t update_uri = {
+        .uri      = "/OTA",
+        .method   = HTTP_POST,
+        .handler  = handler_update_esp,
+        .user_ctx = server_buf
+    };
+    httpd_register_uri_handler(server, &update_uri);
 
     httpd_uri_t redir_uri = {
         .uri      = "/*",
