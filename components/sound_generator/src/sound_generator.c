@@ -101,8 +101,7 @@ static IRAM_ATTR void stop_signale()
 
 static void init_pwm(unsigned freq_hz)
 {
-    if(freq_hz > 6000 || freq_hz < 20) ledc_timer.freq_hz = DEFAULT_DUTY;
-    else ledc_timer.freq_hz = freq_hz;
+    ledc_timer.freq_hz = freq_hz;
     ESP_ERROR_CHECK(ledc_timer_config(&ledc_timer));
     ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel));
 }

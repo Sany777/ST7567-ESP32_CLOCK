@@ -1,134 +1,64 @@
 #include "forecast_http_client.h"
 
-#include "esp_http_client.h"
 #include "clock_module.h"
 #include "device_common.h"
 #include "device_macro.h"
 
-#define SIZE_URL_BUF 250
+
+#include <stdio.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <unistd.h>
+#include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
+#define OPENWEATHER_SERVER_HOST "api.openweathermap.org"
+#define SERVER_PORT "80" 
+#define SIZE_URL_BUF 256
+#define FORECAST_LIST_SIZE 5
+#define MAX_RETRIES 3  
+#define RETRY_DELAY_MS 1000  
+
 #define MAX_KEY_NUM 10
 
 extern char network_buf[];
-static char url_buf[SIZE_URL_BUF];
+
+bool fetch_data(const char *request, char *response_buf, uint32_t *resp_size) ;
+static size_t get_value_ptrs(char ***value_list, char *data_buf, const size_t buf_len, const char *key);
+static void split(char *data_buf, const char *split_chars_str, uint32_t data_size);
 
 
-static size_t get_value_ptrs(char ***value_list, char *data_buf, const size_t buf_len, const char *key)
+bool fetch_weather_data(const char *city, const char *api_key, uint32_t *resp_size) 
 {
-    char *buf_oper[MAX_KEY_NUM] = { 0 };
-    if(data_buf == NULL) 
-        return 0;
-    const size_t key_size = strlen(key);
-    char *data_ptr = data_buf;
-    char **buf_ptr = buf_oper;
-    const char *data_end = data_buf+buf_len;
-    size_t value_list_size = 0;
-    while(data_ptr = strstr(data_ptr, key), 
-            data_ptr 
-            && data_end > data_ptr 
-            && MAX_KEY_NUM > value_list_size ){
-        data_ptr += key_size;
-        buf_ptr[value_list_size++] = data_ptr;
-    }
-    const size_t data_size = value_list_size * sizeof(char *);
-    *value_list = (char **)malloc(data_size);
-    if(value_list == NULL)
-        return 0;
-    memcpy(*value_list, buf_oper, data_size);
-    return value_list_size;
+    char request[SIZE_URL_BUF + 128];
+    snprintf(request, sizeof(request),
+        "GET /data/2.5/forecast?q=%s&units=metric&cnt=%d&appid=%s HTTP/1.1\r\n"
+        "Host: " OPENWEATHER_SERVER_HOST "\r\n"
+        "Connection: close\r\n\r\n",
+        city, FORECAST_LIST_SIZE, api_key);
+    return fetch_data(request, network_buf, resp_size);
 }
 
-static int data_size;      
+#define TIME_SERVER_HOST "worldtimeapi.org"
 
-static esp_err_t http_event_handler(esp_http_client_event_t *evt)
+bool fetch_time_data(uint32_t *resp_size) 
 {
-    static char *output_buffer = NULL; 
-    switch(evt->event_id) {
-    case HTTP_EVENT_ON_DATA:
-    {
-        if(!esp_http_client_is_chunked_response(evt->client)){
-            int copy_len = 0;
-            if(evt->user_data){
-                copy_len = MIN(evt->data_len, (NET_BUF_LEN - data_size));
-                if (copy_len) {
-                    memcpy(evt->user_data + data_size, evt->data, copy_len);
-                }
-            } else {
-                const int buffer_len = esp_http_client_get_content_length(evt->client);
-                if (output_buffer == NULL) {
-                    output_buffer = (char *) malloc(buffer_len);
-                    if (output_buffer == NULL) {
-                        return ESP_FAIL;
-                    }
-                }
-                copy_len = MIN(evt->data_len, (buffer_len - data_size));
-                if (copy_len) {
-                    memcpy(output_buffer + data_size, evt->data, copy_len);
-                }
-            }
-            data_size += copy_len;
-        }
-        break;
-    }
-    case HTTP_EVENT_ON_FINISH:
-    {
-        if(output_buffer != NULL){
-            free(output_buffer);
-            output_buffer = NULL;
-        }
-        break;
-    }
-    case HTTP_EVENT_DISCONNECTED:
-    {
-        if (output_buffer != NULL){
-            free(output_buffer);
-            output_buffer = NULL;
-        }
-        break;
-    }
-    default:break;
-    }
-    return ESP_OK;
+    return true;
+    char request[SIZE_URL_BUF + 128];
+    snprintf(request, sizeof(request),
+        "GET /api/timezone/Etc/UTC HTTP/1.1\r\n"
+        "Host: " TIME_SERVER_HOST "\r\n"
+        "Connection: close\r\n\r\n");
+    return fetch_data(request, network_buf, resp_size);
 }
 
-
-
-static void split(char *data_buf, const char *split_chars_str)
+bool device_update_time()
 {
-    char *ptr = data_buf;
-    const char *end_data_buf = data_buf + data_size;
-    const size_t symb_list_size = strlen(split_chars_str);
-    char c;
-    while(ptr != end_data_buf){
-        c = *(ptr);
-        for(int i=0; i<symb_list_size; ++i){
-            if(split_chars_str[i] == c){
-                *(ptr) = 0;
-                break;
-            }
-        }
-        ++ptr;
-    }
-}
-
-
-int device_update_time()
-{
-    data_size = 0;
+    uint32_t data_size = 0;
     char ** dateTime = NULL;
-    esp_http_client_config_t config = {
-        .url = "http://worldtimeapi.org/api/timezone/Etc/UTC",  
-        .event_handler = http_event_handler,
-        .user_data = (void*)network_buf,    
-        .method = HTTP_METHOD_GET,
-        .buffer_size = NET_BUF_LEN,
-        .auth_type = HTTP_AUTH_TYPE_NONE,
-        .skip_cert_common_name_check = true                  
-    };
-
-    esp_http_client_handle_t client = esp_http_client_init(&config);
-    esp_err_t err = esp_http_client_perform(client);
-    if(err == ESP_OK && data_size){
-        network_buf[data_size] = '\0';
+    if(fetch_time_data(&data_size)){
         get_value_ptrs(&dateTime, network_buf, data_size, "\"dateTime\":");
         if(dateTime){
             struct tm tinfo;
@@ -146,47 +76,76 @@ int device_update_time()
             settimeofday(&now, NULL);
             free(dateTime);
             dateTime = NULL;
-        } else {
-            err = ESP_FAIL;
+            return true;
         }
     }
-    esp_http_client_cleanup(client);
-    return err;
+    return false;
 }
 
-int update_forecast_data(const char *city, const char *api_key)
+
+
+bool fetch_data(const char *request, char *response_buf, uint32_t *resp_size) 
 {
-    data_size = 0;
-    int res = ESP_FAIL;
+    *resp_size = 0;
+    struct addrinfo hints = {0}, *res;
+    int sock = -1;
+    int retries = 0;
+    while (retries < MAX_RETRIES) {
+        retries++;
+        hints.ai_family = AF_INET;
+        hints.ai_socktype = SOCK_STREAM;
+        if (getaddrinfo(OPENWEATHER_SERVER_HOST, SERVER_PORT, &hints, &res) != 0) {
+            vTaskDelay(pdMS_TO_TICKS(RETRY_DELAY_MS));
+            continue;
+        }
+
+        sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+        if (sock < 0) {
+            freeaddrinfo(res);
+            vTaskDelay(pdMS_TO_TICKS(RETRY_DELAY_MS));
+            continue;
+        }
+
+        if (connect(sock, res->ai_addr, res->ai_addrlen) != 0) {
+            close(sock);
+            freeaddrinfo(res);
+            vTaskDelay(pdMS_TO_TICKS(RETRY_DELAY_MS));
+            continue;
+        }
+        freeaddrinfo(res); 
+
+        if (send(sock, request, strlen(request), 0) < 0) {
+            close(sock);
+            vTaskDelay(pdMS_TO_TICKS(RETRY_DELAY_MS));
+            continue;
+        }
+
+        *resp_size = recv(sock, response_buf, NET_BUF_LEN - 1, 0);
+        if (*resp_size > 0) {
+            response_buf[*resp_size] = '\0'; 
+            close(sock);
+            return true;  
+        } else {
+            close(sock);
+            vTaskDelay(pdMS_TO_TICKS(RETRY_DELAY_MS));
+        }
+    }
+    return false; 
+}
+
+bool update_forecast_data(const char *city, const char *api_key)
+{
+    uint32_t data_size = 0;
     char **feels_like_list = NULL, **description_list = NULL, **pop_list = NULL, **dt_list = NULL; 
 
     if(strnlen(city, MAX_STR_LEN) == 0 || strnlen(api_key, MAX_STR_LEN) != API_LEN)
-        return ESP_FAIL;
-
-    snprintf(url_buf, SIZE_URL_BUF, 
-    "https://api.openweathermap.org/data/2.5/forecast?q=%s&units=metric&cnt=%d&appid=%s", 
-    city, FORECAST_LIST_SIZE, api_key);
-
-    esp_http_client_config_t config = {
-        .url = url_buf,
-        .event_handler = http_event_handler,
-        .user_data = (void*)network_buf,    
-        .method = HTTP_METHOD_GET,
-        .buffer_size = NET_BUF_LEN,
-        .auth_type = HTTP_AUTH_TYPE_NONE,
-        .skip_cert_common_name_check = true
-    };
-    esp_http_client_handle_t client = esp_http_client_init(&config);
-    esp_http_client_perform(client);
-    if(data_size){
-        network_buf[data_size] = 0;
+        return false;
+    if(fetch_weather_data(city, api_key, &data_size)){
         const size_t pop_num = get_value_ptrs(&pop_list, network_buf, data_size, "\"pop\":");
         const size_t feels_like_num = get_value_ptrs(&feels_like_list, network_buf, data_size, "\"feels_like\":");
         const size_t description_num = get_value_ptrs(&description_list, network_buf, data_size, "\"description\":\"");
         get_value_ptrs(&dt_list, network_buf, data_size,"\"dt\":");
-
-        split(network_buf, "},\"");
-
+        split(network_buf, "},\"", data_size);
         if(description_list){
             memset(service_data.desciption, 0, sizeof(service_data.desciption));
             for(int i=0; i<description_num && i<FORECAST_LIST_SIZE; ++i){
@@ -219,11 +178,53 @@ int update_forecast_data(const char *city, const char *api_key)
             free(pop_list);
             pop_list = NULL;
         }
-        res = ESP_OK;
+        return true;
     }
-    
-    esp_http_client_cleanup(client);
-
-    return res;
+    return false;
 }
 
+
+
+static size_t get_value_ptrs(char ***value_list, char *data_buf, const size_t buf_len, const char *key)
+{
+    char *buf_oper[MAX_KEY_NUM] = { 0 };
+    if(data_buf == NULL) 
+        return 0;
+    const size_t key_size = strlen(key);
+    char *data_ptr = data_buf;
+    char **buf_ptr = buf_oper;
+    const char *data_end = data_buf+buf_len;
+    size_t value_list_size = 0;
+    while(data_ptr = strstr(data_ptr, key), 
+            data_ptr 
+            && data_end > data_ptr 
+            && MAX_KEY_NUM > value_list_size ){
+        data_ptr += key_size;
+        buf_ptr[value_list_size++] = data_ptr;
+    }
+    const size_t data_size = value_list_size * sizeof(char *);
+    *value_list = (char **)malloc(data_size);
+    if(value_list == NULL)
+        return 0;
+    memcpy(*value_list, buf_oper, data_size);
+    return value_list_size;
+}
+
+
+static void split(char *data_buf, const char *split_chars_str, uint32_t data_size)
+{
+    char *ptr = data_buf;
+    const char *end_data_buf = data_buf + data_size;
+    const size_t symb_list_size = strlen(split_chars_str);
+    char c;
+    while(ptr != end_data_buf){
+        c = *(ptr);
+        for(int i=0; i<symb_list_size; ++i){
+            if(split_chars_str[i] == c){
+                *(ptr) = 0;
+                break;
+            }
+        }
+        ++ptr;
+    }
+}

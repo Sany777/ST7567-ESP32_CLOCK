@@ -128,7 +128,8 @@ int device_commit_changes()
 
 unsigned device_get_state()
 {
-    EventBits_t bits = xEventGroupGetBits(clock_event_group);
+    if( ! clock_event_group || ! event_group )return 0;
+    unsigned bits = xEventGroupGetBits(clock_event_group);
     bits |= xEventGroupGetBits(event_group)<<EVENT_BIT_SHIFT;
     return  bits;
 } 
@@ -263,8 +264,8 @@ bool is_signale(const struct tm *tm_info)
 void device_init()
 {
     clock_event_group = xEventGroupCreate();
-    event_group = xEventGroupCreate();
     assert(clock_event_group);
+    event_group = xEventGroupCreate();
     assert(event_group);
     device_gpio_init();
     read_data();

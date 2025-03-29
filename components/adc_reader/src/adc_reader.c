@@ -4,8 +4,6 @@
 #include "esp_adc/adc_oneshot.h"
 #include "esp_sleep.h"
 
-#include "esp_adc/adc_oneshot.h"
-
 #define ADC_CHANNEL ADC_CHANNEL_4  // GPIO13 (ESP32)
 #define ADC_ATTEN ADC_ATTEN_DB_11    
 #define ADC_MAX_VALUE   4095.0F      // 12-bit ADC maximum value
@@ -32,13 +30,6 @@ void adc_reader_init(void)
 float device_get_voltage(void)
 {
     int adc_value = 0;
-    int raw;
-    for(int i = 0; i < MEAS_NUM; ++i)
-    {
-        adc_oneshot_read(adc_handle, ADC_CHANNEL, &raw);
-        adc_value += raw;
-    }
-    adc_value /= MEAS_NUM;
-
+    adc_oneshot_read(adc_handle, ADC_CHANNEL, &adc_value);
     return ((float)adc_value * VREF * DEV_CONST) / ADC_MAX_VALUE;
 }

@@ -22,7 +22,6 @@
 #include "clock_module.h"
 #include "setting_server.h"
 
-
 enum FuncId{
     SCREEN_MAIN,
     SCREEN_TIMER,
@@ -129,7 +128,6 @@ static void main_task(void *pv)
             dht20_read_data(&temp, NULL);
         }
         device_set_pin(PIN_DHT20_EN, 0);
-        cmd = CMD_UPDATE_DATA;
         do{
             bits = device_get_state();
             if(bits&BIT_EVENT_BUT_LONG_PRESSED){
@@ -254,7 +252,7 @@ static void service_task(void *pv)
     bool open_sesion;
     int delay_update_forecast = DELAY_TRY_GET_DATA;
     vTaskDelay(100/portTICK_PERIOD_MS);
-    int esp_res, wait_client_timeout;
+    int wait_client_timeout;
     for(;;){
         bits = device_wait_bits_untile(BIT_UPDATE_FORECAST_DATA|BIT_START_SERVER|BIT_FORCE_UPDATE_FORECAST_DATA, 
                             portMAX_DELAY);
@@ -295,52 +293,43 @@ static void service_task(void *pv)
         }
 
         if(bits&BIT_UPDATE_FORECAST_DATA || bits&BIT_FORCE_UPDATE_FORECAST_DATA){
-            esp_res = connect_sta(device_get_ssid(),device_get_pwd());
-            vTaskDelay(200/portTICK_PERIOD_MS);
-            if(esp_res == ESP_OK){
+            if(connect_sta(device_get_ssid(), device_get_pwd()) == ESP_OK){
+                vTaskDelay(200/portTICK_PERIOD_MS);
                 device_set_state(BIT_STA_CONF_OK);
                 if(bits&BIT_UPDATE_TIME || !(bits&BIT_IS_TIME)){
-                    esp_res = device_update_time();
-                    if(esp_res != ESP_OK){
+                    if(device_update_time()){
+                        bits = device_set_state(BIT_IS_TIME);
+                    } else {
                         init_sntp();
                         bits = device_wait_bits(BIT_IS_TIME);
-                        if(bits&BIT_IS_TIME)
-                            esp_res = ESP_OK;
                     }
-                    if(esp_res == ESP_OK){
-                        device_set_state(BIT_IS_TIME);
+                    if(bits&BIT_IS_TIME){
                         device_clear_state(BIT_UPDATE_TIME);  
-                    } else if(bits&BIT_IS_TIME){
-                        device_clear_state(BIT_UPDATE_TIME|BIT_IS_TIME);
                     }
                 }
-                if(esp_res == ESP_OK){
-                    esp_res = update_forecast_data(device_get_city_name(),device_get_api_key());
-                }
-            }
-            if(esp_res == ESP_OK){
-                service_data.update_data_time = get_cur_time_tm()->tm_hour;
-                if(! (bits&BIT_FORECAST_OK)){
-                    delay_update_forecast = DELAY_UPDATE_FORECAST;
-                    device_set_state(BIT_FORECAST_OK);
-                    create_periodic_task(update_forecast_handler, DELAY_UPDATE_FORECAST, FOREVER);
-                }
-            } else {
-
-                device_clear_state(BIT_FORECAST_OK);
-
-                if(bits&BIT_UPDATE_FORECAST_DATA){
-                    create_periodic_task(update_forecast_handler, delay_update_forecast, FOREVER);
-                    if(delay_update_forecast < DELAY_UPDATE_FORECAST){
-                        delay_update_forecast *= 2;
+                vTaskDelay(200/portTICK_PERIOD_MS);
+                if(update_forecast_data(device_get_city_name(),device_get_api_key())){
+                    service_data.update_data_time = get_cur_time_tm()->tm_hour;
+                    if(! (bits&BIT_FORECAST_OK)){
+                        delay_update_forecast = DELAY_UPDATE_FORECAST;
+                        device_set_state(BIT_FORECAST_OK);
+                        create_periodic_task(update_forecast_handler, DELAY_UPDATE_FORECAST, FOREVER);
+                    }
+                } else {
+                    device_clear_state(BIT_FORECAST_OK);
+                    if(bits&BIT_UPDATE_FORECAST_DATA){
+                        create_periodic_task(update_forecast_handler, delay_update_forecast, FOREVER);
+                        if(delay_update_forecast < DELAY_UPDATE_FORECAST){
+                            delay_update_forecast *= 2;
+                        }
                     }
                 }
             }
-            wifi_stop();
-            device_set_state(BIT_EVENT_NEW_DATA);
-            vTaskDelay(1000/portTICK_PERIOD_MS);
-            device_clear_state(BIT_UPDATE_FORECAST_DATA|BIT_FORCE_UPDATE_FORECAST_DATA|BITS_DENIED_SLEEP);
         }
+        wifi_stop();
+        device_set_state(BIT_EVENT_NEW_DATA);
+        vTaskDelay(500/portTICK_PERIOD_MS);
+        device_clear_state(BIT_UPDATE_FORECAST_DATA|BIT_FORCE_UPDATE_FORECAST_DATA|BITS_DENIED_SLEEP);
     }
 }
 

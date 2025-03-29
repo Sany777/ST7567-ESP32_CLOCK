@@ -125,7 +125,7 @@ void device_gpio_init()
     gpio_isr_handler_add(PIN_ENCODER_BUT, button_isr_handler, NULL);
 }
 
-int IRAM_ATTR device_set_pin(int pin, unsigned state) 
+int device_set_pin(int pin, unsigned state) 
 {
     gpio_set_direction((gpio_num_t)pin, GPIO_MODE_INPUT_OUTPUT);
     return gpio_set_level((gpio_num_t)pin, state);
